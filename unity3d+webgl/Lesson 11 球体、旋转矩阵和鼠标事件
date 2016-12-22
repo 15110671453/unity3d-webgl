@@ -1,0 +1,402 @@
+Lesson 11 球体、旋转矩阵和鼠标事件
+By adminOn 2011 年 9 月 22 日3 条评论 3,201 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到WebGL教程的第11课。本节课是第一个不是基于NeHe的OpenGL教程改编的课时。这节课里，我们将会演示在平行光照下的一个球体，并为其贴上纹理贴图，观察者可以使用鼠标来旋转球体。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+一开始当纹理还没有完整载入的时候你会看到一个白色的球体，载入完成后你将看到月球，并有来自右上方的光照。用鼠标拖拽球体，球体将会转动，光照效果依然存在。如果你想要改变光线的参数，和第7课一样，可以使用canvas下方的文本输入框。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+和往常一样，我们还是从代码的底部开始我们的学习，一步一步讲解那些发生变化的代码。在body标签之前的HTML代码，与第七课相比并没有发生变化，所以我们直接来看一下webGLStart函数。
+
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+406
+407
+408
+409
+    function webGLStart() {
+        var canvas = document.getElementById("lesson11-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        initTexture();
+ 
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+ 
+        canvas.onmousedown = handleMouseDown;
+        document.onmouseup = handleMouseUp;
+        document.onmousemove = handleMouseMove;
+ 
+        tick();
+    }
+这三行新增加的代码允许我们探测鼠标事件，当用户拖拽球体的时候可以相应的旋转它。很明显，我们只在3D canvas内部读取MouseDown事件（如果你在页面的其他部分进行了拖拽，将不会对球体产生影响，比如说点击文本框）。不那么明显的是，我们却在整个页面而不仅仅是canvas中，监听MouseUp和MouseMove事件；这样我们就可以完整地读取用户拖拽，即使鼠标被释放在或被移动到canvas之外，只要拖拽行为发生在canvas里面就可以了。这种解决方法让我们避免了成为那些愚蠢的交互页面中的一员——当你想要旋转物体的时候，在场景内按下鼠标，然后由于拖拽移动鼠标的缘故，在场景外释放了鼠标，但是你却发现当你把鼠标移动回场景内的时候，MouseUp事件却没有生效，笨蛋电脑依然认为你还是在拖拽当中，逼着你在场景内的某个位置单击鼠标才行。
+
+继续往上看代码，我们来到了tick函数，在本节课中它只是简单的安排下一帧调用drawScene函数，因为它已经不需要处理键盘输入了（因为本课中我们没有键盘输入），也不需要运动场景（因为场景中物体的运动只对用户输入发生反应，没有独立的动画场景）
+
+下一个比较重要的变动位于drawScene函数中。开始，我们还是用样板化的代码清空了canvas并设置了透视，然后和第7课一样用相同的代码设置了光照。
+
+332
+333
+334
+335
+336
+337
+338
+339
+340
+341
+342
+343
+344
+345
+346
+347
+348
+349
+350
+351
+352
+353
+354
+355
+356
+357
+358
+359
+360
+361
+362
+363
+364
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+ 
+        var lighting = document.getElementById("lighting").checked;
+        gl.uniform1i(shaderProgram.useLightingUniform, lighting);
+        if (lighting) {
+            gl.uniform3f(
+                shaderProgram.ambientColorUniform,
+                parseFloat(document.getElementById("ambientR").value),
+                parseFloat(document.getElementById("ambientG").value),
+                parseFloat(document.getElementById("ambientB").value)
+            );
+ 
+            var lightingDirection = new okVec3(
+                parseFloat(document.getElementById("lightDirectionX").value),
+                parseFloat(document.getElementById("lightDirectionY").value),
+                parseFloat(document.getElementById("lightDirectionZ").value)
+            );
+ 
+            var adjustedLD = lightingDirection.normalize(false);
+            adjustedLD = okVec3MulVal(adjustedLD, -1.0);
+            gl.uniform3fv(shaderProgram.lightingDirectionUniform, adjustedLD.toArray());
+ 
+            gl.uniform3f(
+                shaderProgram.directionalColorUniform,
+                parseFloat(document.getElementById("directionalR").value),
+                parseFloat(document.getElementById("directionalG").value),
+                parseFloat(document.getElementById("directionalB").value)
+            );
+        }
+然后，我们移动到正确的位置，开始绘制月球。
+
+366
+        mvMatrix = okMat4Trans(0.0, 0.0, -6.0);
+下面，出现了一行比较奇怪的代码。我现在先不详细解释，大概说一下就是我们把月球的当前旋转状态储存在一个矩阵之中，这个矩阵从单位矩阵开始（表示我们没有做任何旋转），然后当用户进行鼠标操作时，矩阵也会发生对应于这个操作的相应变化。所以，在我们绘制月球之前，需要将旋转矩阵应用于当前的模型视图矩阵，我们使用了okMat4Mul函数。
+
+367
+        mvMatrix = okMat4Mul(mvMatrix, moonRotationMatrix);
+完成之后，剩下的工作就是绘制月球了。这些代码都相当的标准——我们设置了纹理，然后告诉WebGL用建立好的数组对象来绘制一串三角形，这些代码我们在前几课用过很多次了。
+
+369
+370
+371
+372
+373
+374
+375
+376
+377
+378
+379
+380
+381
+382
+383
+384
+385
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, moonTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, moonVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, moonVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexNormalBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, moonVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, moonVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, moonVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+    }
+那么，我们是如何建立顶点位置、法线、纹理坐标和顶点索引，并给它们赋值，来绘制一个球体呢？秘密就在于下面这个函数中：initBuffers。
+
+函数开始先定义了对象数组的全局变量，然后指定了经度带和纬度带的数量，以及球体的半径。如果你打算在你自己的WebGL页面中使用这些代码，你应当将经度带、纬度带和弧度都参数化，并且将数组对象储存在其他地方而不是全局变量中。这里我没有这么做只是为了演示起来方便简单，我可不想因此影响了你的良好的面对对象以及函数化的编程理念。
+
+251
+252
+253
+254
+255
+256
+257
+258
+259
+    var moonVertexPositionBuffer;
+    var moonVertexNormalBuffer;
+    var moonVertexTextureCoordBuffer;
+    var moonVertexIndexBuffer;
+ 
+    function initBuffers() {
+        var latitudeBands = 30;
+        var longitudeBands = 30;
+        var radius = 2;
+那么，究竟什么是经度带和纬度带呢？为了绘制一系列三角形来逼近球体，我们必须将球体分割开来。有很多聪明的技巧来实现这种分割，我们将使用其中最简单的方法，仅仅需要高中几何知识。这是因为（a）它的效果相当完美（b）我懂，并且理解起来不会让人头痛。这种方法是基于一个Khronos网站上的Demo的，原本是由WebKit团队开发的。它的原理如下：
+
+制作蔬菜沙拉时的西红柿切片让我们先从这些专业术语的定义开始。纬线就是在一个球体上，告诉你距离南极或北极有多远的线。在球体表面上丈量南极到北极的距离，是一个常量。如果你按照纬线将一个球体从上到下依次切开，那么在顶部和底部你会得到镜片形状的切片，然后慢慢的在中间得到光盘形状的切片。如果你很难视觉化的想象出来，请参考在制作蔬菜沙拉时切西红柿。只不过切的时候要保证每个切片表面从顶部到底部的距离都是相同的，显然中间部分的切片的厚度要比两端的大。
+
+而经线是另外一种线，它们将球体分割成弓形。如果你按照经线切开一个球体，那么切出来的部分好像切橙子一样。
+
+切橙子
+
+现在，为了绘制球体，想象一下我们在球体上画满了经线和纬线。我们要做的就是计算出这些经线和纬线的交点，用这些交点作为顶点位置。这样我们就可以把由两条相邻的经线和纬线所组成的四边形分割成两个三角形，然后绘制它们。左边的图片应该很清楚地表达出我们的目的。
+
+下一个问题是，我们如何才能计算出这些经线和纬线的交点呢？让我们假设球体的半径是1，然后在X轴和Y轴平面上垂直切开球体，让原点处于球体中心位置。显然，切片的形状是一个正圆，一条条纬线平行穿过此圆。在图中，你会发现全部一共有10个纬线带，而我们正在指向从上往下数第3个纬线带。连结坐标轴原点和纬线与圆的交点，设Y轴与该连接线的夹角为θ。那么利用简单的三角学知识，我们可以算出这条纬线与圆的交点的X坐标是sin(θ)，Y坐标是cos(θ)。
+
+下面，让我们来概括一下如何计算出每条纬线上相应的点。因为每两条相邻纬线之间的球面距离都是相等的，我们可以根据θ的值来计算出每条纬线。每个半圆的弧度是π，所以θ的取值应该是从0、π/10、2π/10、 3π/10……一直到10π/10。这样我们就可以确保我们用纬线平均的将球体分割开来。
+
+在每个确定的纬线上的点，不管他们的经度如何，都有相同的Y坐标。根据我们上面用方程求出的纬线与圆的交点的Y坐标，我们可以推出，在这个用10条纬线平均分割且半径为1的球体上，第n条纬线的Y坐标是cos(nπ / 10)。
+
+这样我们就解决了Y坐标的问题。那X坐标和Z坐标如何确定呢？我们可以看出来，在Z坐标为0、Y坐标为cos(nπ / 10)的位置，X坐标是sin(nπ / 10)。让我们换一种方式来切割球体，就像左边的那幅图，我们在第N条纬线上，水平将球体切开。我们可以看到圆的半径是sin(nπ / 10)，让我们设其为k。如果我们用经线将这个圆平均分割一下，假设是10条经线，我们同样设X轴和经线与圆的交点之间的夹角为φ，又有整个圆的弧度为2π，那么φ的取值应该是0、2π/10、4π/10……我们再利用简单的三角学知识计算一下，可以得出X坐标为kcos(φ)，Z坐标为ksin(φ)。
+
+总结一下，对于一个半径为r的球体，有m个纬线带和n个经线带，我们把从0到π的区间平均分成m等份就可以得到θ的取值范围，把0到2π的区间平均分成n等份就可以得到φ的取值范围，从而计算出坐标x,y,z的值。
+
+x = r sinθ cosφ
+y = r cosθ
+z = r sinθ sinφ
+以上就是我们如何计算出顶点的过程。那现在看看我们还需要哪些值，包括法线和纹理坐标。好吧，其实计算法线是相当容易的。你只要记住，法线就是一个直勾勾指向表面外部的一个长度为1的向量。对于一个半径为1的球体来说，法线就是从球体中心指向到表面的向量，而这个值我们已经在计算顶点的过程中计算出来了！事实上，计算顶点位置和法线向量的顺序应当是，在按照上面的公式运算中，在与半径相乘之前，先把结果储存一下，作为法线向量，然后再与半径相乘得到顶点位置。
+
+纹理坐标，其实更简单。我们希望纹理贴图的提供者，提供给我们的是一张矩形图片。多说一句，WebGL（不是Javascript）会被其他形状的贴图搞晕。这样，我们就可以放心的假定，这张纹理图片的顶部和底部拉伸肯定是遵循墨卡托投影法则（Mercator Projection）的。这样就是说，我们可以从左到右按照经线平均分割纹理图片得出坐标u，从上到下按照纬线平均分割纹理图片得到坐标v。
+
+好了，这就是全部的工作原理。对于Javascript来说，理解并运算以上原理是如此难以置信得简单方便！我们只需要循环遍历所有的纬线切片，在循环内我们再遍历所有的经线切片，之后我们就可以计算出法线、纹理坐标和顶点位置。唯一需要注意的是，在循环结束的条件中，循环变量必须大于经线或纬线的数量。所以这里我们必须使用小于等于而不是小于。也就是说，比如有30条经线，在每条纬线上就会产生31个顶点。因为根据三角函数的循环，最后一个顶点和第一个顶点的位置其实是相同的，这样的一个重叠让我们把所有东西都连接到了一起。
+
+261
+262
+263
+264
+265
+266
+267
+268
+269
+270
+271
+272
+273
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+        var vertexPositionData = [];
+        var normalData = [];
+        var textureCoordData = [];
+        for (var latNumber=0; latNumber <= latitudeBands; latNumber++) {
+            var theta = latNumber * Math.PI / latitudeBands;
+            var sinTheta = Math.sin(theta);
+            var cosTheta = Math.cos(theta);
+ 
+            for (var longNumber=0; longNumber <= longitudeBands; longNumber++) {
+                var phi = longNumber * 2 * Math.PI / longitudeBands;
+                var sinPhi = Math.sin(phi);
+                var cosPhi = Math.cos(phi);
+ 
+                var x = cosPhi * sinTheta;
+                var y = cosTheta;
+                var z = sinPhi * sinTheta;
+                var u = 1 - (longNumber / longitudeBands);
+                var v = 1 - (latNumber / latitudeBands);
+ 
+                normalData.push(x);
+                normalData.push(y);
+                normalData.push(z);
+                textureCoordData.push(u);
+                textureCoordData.push(v);
+                vertexPositionData.push(radius * x);
+                vertexPositionData.push(radius * y);
+                vertexPositionData.push(radius * z);
+            }
+        }
+现在我们已经处理完顶点了，还需要把它们缝合到一起。我们生成一个顶点索引列表，其中包括了上面六个值的序列，将每个四边形分成一对三角形。下面是代码：
+
+291
+292
+293
+294
+295
+296
+297
+298
+299
+300
+301
+302
+303
+304
+        var indexData = [];
+        for (var latNumber=0; latNumber < latitudeBands; latNumber++) {
+            for (var longNumber=0; longNumber < longitudeBands; longNumber++) {
+                var first = (latNumber * (longitudeBands + 1)) + longNumber;
+                var second = first + longitudeBands + 1;
+                indexData.push(first);
+                indexData.push(second);
+                indexData.push(first + 1);
+ 
+                indexData.push(second);
+                indexData.push(second + 1);
+                indexData.push(first + 1);
+            }
+        }
+这些代码实在是太容易理解了。我们通过循环遍历了所有顶点，对于每个顶点，我们将其索引值储存在first变量中，然后向前数longitudeBands + 1个顶点，找到和它配对的下一个纬线带，储存在second变量中（之所以+1是因为我们额外增加的那一个顶点会重叠）。这样我们就生成了两个三角形，如图所示。
+
+好了，以上就是本节课的难点（至少解释起来很难）。让我们继续看看其他变化的代码。
+
+在initBuffers函数上方有3个用于处理鼠标事件的函数。我们必须仔细的考察一下它们。让我们先想想我们的目的是什么。我们想让观察者可以使用拖拽来旋转月球。一个幼稚的想法就是，我们建立三个变量用来表示X、Y、Z轴的旋转。当用户拖拽鼠标的时候我们可以相应的调整变量值。如果用户上下拖拽鼠标，我们就调整X轴的旋转变量；如果用户左右拖拽鼠标，我们就调整Y轴的旋转变量。这么做的问题在于，当你围绕不同的轴旋转物体的时候，你实际上做的一系列不同的旋转，而这一系列不同旋转的应用顺序很重要。比如说，用户先让月球围绕Y轴旋转了90°，然后又向下拖拽鼠标。这时，如果我们按照原来说好的再围绕X轴做旋转，观察者就会发现实际上月球正在围绕Z轴旋转。因为第一次的旋转，同时也旋转了轴线。这对于观察者来说会变得很奇怪。当观察者先把物体围绕X轴旋转10°，再围绕Y轴旋转23°，再怎样怎样时，这种问题变的更糟糕。我们可以耍下小聪明——“给出当前的旋转装袋，如果用户向下拖拽鼠标，那就同时改变所有三个旋转变量”。其实，一共更简单的处理方式是，用某种方法记录下观察者施加给月球的每一个旋转，然后在我们绘制的时候重新展示出来。表面上看，这种方法似乎需要耗费大量资源。但是不要忘了，我们已经找到一种完美的方法来保持追踪几何体的一系列变换，并且只用一个操作就可以应用这些变换，那就是——矩阵！
+
+我们维护一个用来储存当前月球旋转状态的矩阵，叫做moonRotationMatrix。当用户拖拽鼠标的时候，我们会捕获到一系列的鼠标事件，每捕获到一个鼠标事件，我们都会根据用户拖拽鼠标的量，计算出绕着当前X轴和Y轴旋转多少度。我们用一个矩阵来表示这两个旋转，然后左乘moonRotationMatrix——之所以使用左乘，理由和我们上节课设置相机一样，我们需要做一个逆操作，旋转是基于eye space的，而不是模型空间。
+
+有了以上的说明，下面的代码就变得清晰起来。
+
+211
+212
+213
+214
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+    var mouseDown = false;
+    var lastMouseX = null;
+    var lastMouseY = null;
+ 
+    var moonRotationMatrix = new okMat4();
+ 
+    function handleMouseDown(event) {
+        mouseDown = true;
+        lastMouseX = event.clientX;
+        lastMouseY = event.clientY;
+    }
+ 
+ 
+    function handleMouseUp(event) {
+        mouseDown = false;
+    }
+ 
+ 
+    function handleMouseMove(event) {
+        if (!mouseDown) {
+            return;
+        }
+        var newX = event.clientX;
+        var newY = event.clientY;
+ 
+        var deltaX = newX - lastMouseX
+        var newRotationMatrix = new okMat4();
+        newRotationMatrix.rotY(OAK.SPACE_LOCAL, deltaX / 10, true);
+ 
+        var deltaY = newY - lastMouseY;
+        newRotationMatrix.rotX(OAK.SPACE_LOCAL, deltaY / 10, true);
+ 
+        moonRotationMatrix = okMat4Mul(newRotationMatrix, moonRotationMatrix);
+ 
+        lastMouseX = newX
+        lastMouseY = newY;
+    }
+以上就是本节课的另一个重点。代码中剩下的变化都很简单，比如载入新的纹理和新的变量名称。
+
+好了！这节课结束了，你学会了如何使用一种简单但是有效的算法来绘制球体；如何捕捉鼠标事件，让用户可以通过拖拽来和你的3D物体交互；如何使用矩阵来表示场景中物体的当前旋转状态。
+
+下一节课中，我们将会讲解一种新的光源类型：点光源，它是一种来自于场景内部某处并且向外辐射的光源，类似于一个光秃秃的灯泡。

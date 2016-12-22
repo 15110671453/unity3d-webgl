@@ -1,0 +1,299 @@
+Lesson 12 点光源
+By adminOn 2011 年 9 月 23 日一条评论 1,604 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到WebGL教程的第12课，这是第二节不是基于NeHe的OpenGL教程的WebGL课程。在这节课中，我们将介绍点光源，这节课很简单，但是却很重要，而且会引出将来一些有趣的内容。点光源，顾名思义，指的就是来自一个场景内特殊的点的光源，这与我们一直使用的平行光不一样。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+你将会看到一个绕轨道旋转的球体和立方体，在加载纹理的时候，他们会是白色的，当加载完成后，你们会看到一个月亮和一个木条箱。他们两个都是由位于他们之间的一个点光源照亮的。如果你希望改变光源的位置和颜色，你可以使用canvas下方的文本输入框。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+首先，让我们来解释一下用点光源做些什么；点光源与平行光源之间的不同在于点光源中的光线来自场景中的一个点。仔细想想你就能搞清楚，这意味着，对于场景中的每一个点，每束光线射入的角度都是不同的。所以，处理它的最好方法就是计算每个顶点朝着光线所在位置的方向，接着进行我们对平行光线所做的同样的运算。这就是我们所要做的。
+
+（在这里你们可能会想，计算顶点之间的点的光的方向 – 也就是计算每个片元上光的方向，会比仅仅计算每个顶点上的光的方向来的更好。没错，这样想是正确的。这样的计算方法对于显卡来说，比较困难，但是，它给出的效果会更好。在下一节课，我将会详细说明）
+
+现在，既然我们知道了我们需要做的是什么，我们可以再回到示例页面看一下，你会发现在场景中，射出光源的那个点上没有一个实际的物体。如果你希望有一个看上去发出光源的物体（例如在太阳系中的太阳），你就需要分别定义光源和物体。根据我们前几课所学，绘制一个新物体现在对我们是来说十分简单了。所以在教程中，我仅仅会介绍点光源是如何作用的。在以上的说明中你一定可以看出整个过程十分简单；和第十一课中所述内容的最大不同在于需要绘制一个立方体，并且让立方体和球体一起沿着轨道转动。
+
+和以前一样我们从源代码底部向上看起，找出本课代码与第十一课代码中的不同。第一个不同在于HTML的 body标签中，这里用来输入光源方向的字段已经改为光源位置。这个改动十分简单，所以就不再解释了。接着让我们来看一下webGLStart函数。这里的改动依然很简单，这节课上，我们不会用到鼠标控制，所以我们也不需要这部分代码；并且，之前称作initTexture的函数现在被更名为initTextures，这是因为函数需要同时加载一个立方体和一个球体。很无聊的理由吧……
+
+往上一点，tick函数现在有了一个新的调用，让物体能够动起来，这样场景就会随着时间推移不断更新。
+
+546
+547
+548
+549
+550
+    function tick() {
+        okRequestAnimationFrame(tick);
+        drawScene();
+        animate();
+    }
+再往上就是animate函数，这个函数将会更新两个全局变量，用来描述立方体和球体在以每秒50度的速度围绕轨道旋转时，他们围绕轨道走了多远。
+
+531
+532
+533
+534
+535
+536
+537
+538
+539
+540
+541
+542
+    var lastTime = 0;
+ 
+    function animate() {
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+            var elapsed = timeNow - lastTime;
+ 
+            moonAngle += 0.05 * elapsed;
+            cubeAngle += 0.05 * elapsed;
+        }
+        lastTime = timeNow;
+    }
+再往上是drawScene函数，这里你会发现一些有趣的变化。函数由样板化的代码开始，清除我们的画布并且设置透视，接着是与11课相同的代码，检查光线复选框是否被勾选，并且将环境光的颜色传递给显卡：
+
+454
+455
+456
+457
+458
+459
+460
+461
+462
+463
+464
+465
+466
+467
+468
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+ 
+        var lighting = document.getElementById("lighting").checked;
+        gl.uniform1i(shaderProgram.useLightingUniform, lighting);
+        if (lighting) {
+            gl.uniform3f(
+                shaderProgram.ambientColorUniform,
+                parseFloat(document.getElementById("ambientR").value),
+                parseFloat(document.getElementById("ambientG").value),
+                parseFloat(document.getElementById("ambientB").value)
+            );
+然后，我们通过uniform变量将点光源的位置推送给显卡。这里的代码和我们在11课中用来推送光源方向的代码是完全一样的，不同之处在于我们去掉了一些东西，而不是加入了一些新的东西。在第11课中，当我们把光源方向发送给显卡时，我们需要将它转化为一个单位矢量 （也就是说，将它的长度缩放为1）并且将它的方向倒转。但对于点光源来说，我们不需要这样做，我们只需要直接将光源坐标传递给显卡就行。
+
+470
+471
+472
+473
+474
+475
+            gl.uniform3f(
+                shaderProgram.pointLightingLocationUniform,
+                parseFloat(document.getElementById("lightPositionX").value),
+                parseFloat(document.getElementById("lightPositionY").value),
+                parseFloat(document.getElementById("lightPositionZ").value)
+            );
+接着，我们针对点光源的颜色做相同的操作，drawScene中的光源代码大概就是这样了。
+
+477
+478
+479
+480
+481
+482
+483
+            gl.uniform3f(
+                shaderProgram.pointLightingColorUniform,
+                parseFloat(document.getElementById("pointR").value),
+                parseFloat(document.getElementById("pointG").value),
+                parseFloat(document.getElementById("pointB").value)
+            );
+        }
+下一步，我们将在合适的位置绘制球体和立方体。
+
+485
+486
+487
+488
+489
+490
+491
+492
+493
+494
+495
+496
+497
+498
+499
+500
+501
+502
+503
+504
+505
+506
+507
+508
+509
+510
+511
+512
+513
+514
+515
+516
+517
+518
+519
+520
+521
+522
+523
+524
+525
+526
+527
+528
+        mvMatrix = okMat4Trans(0.0, 0.0, -20.0); 
+ 
+        mvPushMatrix();
+        mvMatrix.rotY(OAK.SPACE_LOCAL, moonAngle, true);
+        mvMatrix.translate(OAK.SPACE_LOCAL, 5, 0, 0, true);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, moonTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, moonVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, moonVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexNormalBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, moonVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, moonVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, moonVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        mvPopMatrix();
+ 
+        mvPushMatrix();
+        mvMatrix.rotY(OAK.SPACE_LOCAL, cubeAngle, true);
+        mvMatrix.translate(OAK.SPACE_LOCAL, 5, 0, 0, true);
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexNormalBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, cubeVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, crateTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+ 
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        mvPopMatrix();
+    }
+关于drawScene就这么多了。接着往上看，我们会看到initBuffers函数，其中增加了立方体和球体的数组对象的代码，这些代码都很标准。再往上，在initTextures函数中，我们载入了两个纹理，而不是一个。
+
+接着往上，我们将会遇到最后一个，也是最重要的一个变化。找到顶点着色器的部分，你会发现这里有一些小的变动。我们从上往下看，注意发生变动的代码位于第35行和第36行。
+
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+    attribute vec3 aVertexPosition;
+    attribute vec3 aVertexNormal;
+    attribute vec2 aTextureCoord;
+ 
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    uniform mat4 uNMatrix;
+ 
+    uniform vec3 uAmbientColor;
+ 
+    uniform vec3 uPointLightingLocation;
+    uniform vec3 uPointLightingColor;
+这样我们就设置好了光源位置和颜色的uniform变量，用来替换原先的光照方向和颜色。接下来：
+
+38
+39
+40
+41
+42
+43
+44
+45
+    uniform bool uUseLighting;
+ 
+    varying vec2 vTextureCoord;
+    varying vec3 vLightWeighting;
+ 
+    void main(void) {
+        vec4 mvPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+        gl_Position = uPMatrix * mvPosition;
+我们在这里所做的是将原先的代码分成两个部分。到目前为止，在我们对顶点着色器的所有的应用中，我们都是一次性把模型视图矩阵和投影矩阵配置在顶点位置中，就像下面这样：
+
+1
+2
+    // Code from lesson 11
+    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+但是在这里，我们将会储存一个中间值，这个顶点位置的值已经应用了当前模型视图矩阵，但是还未根据透视进行调整。在下面的代码中我们用到了这个值。
+
+46
+47
+48
+49
+50
+51
+        vTextureCoord = aTextureCoord;
+ 
+        if (!uUseLighting) {
+            vLightWeighting = vec3(1.0, 1.0, 1.0);
+        } else {
+            vec3 lightDirection = normalize(uPointLightingLocation - mvPosition.xyz);
+光源位置是通过世界空间坐标表现的，顶点坐标也是一样，模型视图矩阵乘以顶点坐标以后，也将会通过世界空间坐标表现。我们需要利用这些坐标算出点光源射入当前顶点的方向，还需要算出一点到另一点的方向，我们要做的仅仅是把他们相除。除过之后，我们需要做的是使方向向量归一化，就像我们之前对平行光的矢量所做的一样，把它的长度调整为1。 设置完成后，将所有的东西组合起来进行一次运算，这和我们对平行光源所做的是完全一样的，只有几处变量名称的变化。
+
+53
+54
+55
+            vec3 transformedNormal = (uNMatrix * vec4(aVertexNormal,1.0)).xyz;
+            float directionalLightWeighting = max(dot(transformedNormal, lightDirection), 0.0);
+            vLightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;
+好了，现在你学会了如何在着色器中编写代码来创建一个点光源。
+
+这节课讲完了，下节课上，我们还是会讲光线，通过逐片元光照而不是逐顶点光照，让场景看起来更加真实。

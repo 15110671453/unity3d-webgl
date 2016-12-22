@@ -1,0 +1,144 @@
+Lesson 0 从零开始
+By adminOn 2011 年 8 月 16 日23 条评论 20,054 次浏览
+工欲善其事，必先利其器。学习WebGL，首先要有一个支持它的浏览器。选择哪一种浏览器，在于你是想看到别人那些惊艳的Demo还是开发出属于你自己的那份惊艳。
+
+目录
+1 说起来容易
+2 做起来难
+2.1 Firefox
+2.2 在Linux上运行Minefield以实现软件加速
+2.3 Safari
+2.4 Chromium
+2.4.1 Windows
+2.4.2 Macintosh
+2.4.3 Linux
+3 一些WebGL实例
+4 疑难解答
+4.1 Mac
+4.2 Windows
+4.3 Linux
+5 感谢
+说起来容易
+
+通常来说，如果你只是想欣赏一下那些屌爆的DEMO而不是开发，而且丝毫不介意一些最新的WebGL特性，那你可以：
+
+如果你使用Windows操作系统，首先确保你已经正确安装了Microsoft DirectX Runtime，它可以免费从微软网站下载；
+完成了DirecX的安装，然后请确保你安装了最新并且最稳定的显卡驱动；
+接下来，就请从Chrome和Firefox之中挑选一个吧！
+Firefox：下载并安装Firefox 6.0。Firefox是个傲娇娘，她对显卡驱动非常挑剔。如果你发现Firefox并不能和你那最新最稳定的显卡驱动很好的协同工作，那请尝试一下Chrome。
+Chrome：目前Chrome对于WebGL的支持还有些Bug，比如会使输入框崩溃。但是对于大多数WebGL页面这都不是问题。所以如果你偏爱Chrome或者Firefox厌恶你的显卡驱动的话，没啥可说的，装Chrome吧！你所要做的就是下载然后安装。记得检查是否是最新的版本，至少也要是Chrome 13.0以上的版本。通常来说Chrome是自动升级的，你也可以通过关于对话框查看到版本号。
+OK！你成功了！接下来，点击这里来尝试运行一些WebGL页面吧！
+
+做起来难
+
+如果你想要开发自己的WebGL页面或者你想要体验最新的WebGL特性，那雷打不动的你是要安装最新版本的浏览器了。现阶段除了IE之外，几乎所有主流浏览器的开发版本都已经支持WebGL了，所以你所要做的就是在你的电脑上紧跟版本潮流。是否麻烦取决于你用什么电脑。
+
+Windows：请先确认你已经正确安装了最新的DirectX Runtime运行库，刚才说过你可以在微软网站上免费下载到它。之后请选择安装Firefox或Chromium中的一个，如果还不管用，看看下面的故障解答是否能帮到你。（测试版的Oprea也开始在Windows平台支持WebGL了；但并不如其他浏览器稳定，所以不要依赖它作为你的主力或唯一的WebGL浏览器。而且Opera还要求你的显卡必须支持OpenGL 2.0才行，否则你会为此头疼不已！）
+Macintosh：如果你的系统是Snow Leopard（OS X 10.6）或者Lion（OS X 10.7）那你不会有什么大问题。建议你使用开发版本的WebKit，这是Safari的另一个替代版本。如果你的系统是Leopard（OS X 10.5）那很遗憾你不能使用那个版本的WebKit，但你可以选择Firefox或Chromium。当然，Snow Leopard或Lion的用户也可以使用Firefox或Chromium。如果你的操作系统版本比Leopard还要古老，那对不起，我也不知道你该用哪种浏览器来运行WebGL了。
+Linux：绝大多数的Linux下的显卡驱动都不能很好的支持WebGL。本来是和Windows系统类似的情况，但在Windows中，浏览器的开发者们使用了DirectX来确保WebGL正常工作。很可惜，在Linux中没有这个后备方案。所以总结如下：
+如果你的显卡是AMD（ATI）或者NVIDIA的主流显卡，并且安装了最新的驱动，那你应该可以在Firefox或Chromium中正常运行WebGL。
+如果你的显卡是Intel的集成显卡，那你只好使用软件加速了，虽然这很烂，但是起码可以保证你能看到一些WebGL效果。试一下Firefox或者Chrome，但它们默认是使用硬件加速的，所以安装完成后并不会马上开始正常工作。要使用软件加速，请通过软件包管理器安装好最新版本的Mesa，然后安装最新版本的Firefox并且进行一些手工设置。
+Firefox
+
+“不稳定的”开发版本的Firefox被称为Minefield。它几乎在没日没夜的更新版本，其实现在已经相对稳定了。至少作者大人我最近很少见到它崩溃（我用它作为主力浏览器哟！）。而且开发版本可以独立于稳定版本单独安装使用，所以不必担心卸载带来的问题，你可以轻松自如的在稳定版本和不稳定版本中切换。
+
+如何下载安装Minefield：
+
+前往Nightly页面，找到适合你电脑的版本。注意！那里会有让你眼花缭乱的各种版本，名字类似于firefox-8.0b11something或firefox-8.0b12something。b后面的数字越大，代表此版本越新。
+安装。安装前记得先关闭正在运行的Firefox窗口。
+运行。
+这里有个小窍门，如果你想让Minefield独立于你电脑上已经安装的稳定版的Firefox，你可以使用以下命令行参数：-P Minefield -no-remote。第一个参数让Minefield使用独立的用户档案（让你可以在两个不同版本的浏览器里储存各自不同的浏览历史和激活页面），第二个参数让你在已经打开稳定版的Firefox的情况下，再打开Minefield，而不是仅仅新建一个窗口。你也许需要也在稳定版本的Firefox上使用-P default -no-remote参数来确保成功。Windows的用户可以右键单击快捷方式然后选择属性，在目标栏里加入命令行参数。Mac和Linux用户，我不知道你们该怎么办，请各自百度吧。
+
+然后，点击这里试试运行一些WebGL页面。
+
+在Linux上运行Minefield以实现软件加速
+
+如果你的显卡，准确的说是显卡驱动不支持OpenGL 2.0，那目前你唯一的出路是使用一个叫做Mesa的库来运行WebGL。基本上Mesa是用软件的方式来模拟显卡工作的方式，所以它会有点慢，但有总比没有强啊！Mesa于Minefield整合在一起，也就是所谓的“不稳定的”Firefox版本，今后将成为你的Linux的一部分。下面来看看如何让这对组合运行起来。
+
+下载最新版本的Minefield。
+安装Minefield，安装前要退出正在运行的Firefox。
+使用你的Linux的软件包管理器安装好Mesa并且更新到最新版本。
+运行Minefield。
+在地址栏输入“about:config”。
+在过滤器中输入“webgl”。
+设置“webgl.enabled_for_all_sites”的值为“true”。
+设置“webgl.software_rendering”的值为“true”。
+将“webgl.osmesalib”的值定位到你的OSMesa共享库（通常位于 /usr/lib/libOSMesa.so）。
+完成之后，点击这里试试运行一些WebGL页面吧！
+
+Safari
+
+记住，Safari只在Snow Leopard（OS X 10.6）和Lion（OS X 10.7）上支持WebGL；如果你的操作系统是Leopard（OS X 10.5）、Windows或Linux，你必须选择Firefox或Chromium。（如果你使用的更低版本的OS X操作系统，那我也不知道你该怎么办了。）
+
+如果你正在使用Snow Leopard（OS X 10.6）和Lion（OS X 10.7），你可以这么办：
+
+确保Safari已经正确安装，并且至少版本应该是Safari 4。
+下载并安装Webkit Nightly版本。
+打开终端，输入以下命令：defaults write com.apple.Safari WebKitWebGLEnabled -bool YES
+运行刚刚安装好的Webkit程序。
+接下来，点击这里试试运行一些WebGL页面吧！
+
+Chromium
+
+Chrome的开发者建议你使用Chrome来体验WebGL，如果你正在开发WebGL应用，那么则建议你使用Nightly版本的Chromium，它是一个开源的浏览器，Chrome就是基于它开发的。具体的步骤在不同的操作系统上有些差异，接下来会介绍在Windows、Macintosh和Linux上的步骤。（我自己只在Windows上试验过，但我听说在其他操作系统上也没有问题。如果下面我有什么地方说错了，请留下评论，我会改正的。）
+
+WINDOWS
+
+前往Chromium的continuous页面找到最新的chrome-win32.zip。
+解压缩。
+在解压缩的文件夹中双击chrome.exe运行程序。
+MACINTOSH
+
+前往Chromium的continuous页面找到最新的chrome-mac.zip。
+解压缩。
+打开终端，进入解压缩的文件夹中。
+确保没有Chrome正在运行
+输入以下命令：./Chromium.app/Contents/MacOS/Chromium
+如果成功了，你可以在这里找到一个脚本，来避免每次重复的输入。
+
+LINUX
+
+如果你正在使用32位的Linux，可以前往这里获得最新的chrome-linux.zip。
+如果你正在使用64为的Linux，可以前往这里获得最新的chrome-linux.zip。
+解压缩，然后进入解压缩文件夹打开终端窗口。
+确保没有Chrome正在运行。
+输入并执行以下命令：./chromium
+接下来，点击这里试试运行一些WebGL页面吧！
+
+一些WebGL实例
+
+如果你的浏览器安装完毕，你应该就可以看到WebGL内容了。先到WebGL Report来个全面的体检吧，它会告诉你哪些WebGL特性在你的浏览器上可以实现。如果它告诉你说你的浏览器根本不支持WebGL，那往下拉拉滚动条，看一看故障解答吧。
+
+如果WebGL可用，那下面的这些页面在你的浏览器中都可以正常显示了！不幸的是由于最近WebGL的一些变动导致许多Demo已经无法使用，但是这里还是给出了一些更新过的demo。
+
+作者大人自己写的Demo： Bouncing Mandelbrot Cubes。
+由Ilmari Heikkinen编写的spiral of spinning cubes和cube-based paint program。
+来自Google的a shiny teapot、San Angeles以及人尽皆知的Google Body Browser。
+一个投入使用的WebGL Demo：ChemDoodle 3D。
+Oak3D Team网站上的Demo，包括从最简单的平面颜色填充到复杂的动态光影，全部使用Oak3D实现。
+你还可以在Khronos的网站上找到更多的Demo实例。
+Google的Chrome体验站Chrome Experiments上也有很多漂亮的Demo，不过其中部分Demo仅仅支持Chrome。
+最后，关注一下作者大人的网站LearningWebGL.com和我们的HiWebGL.com，都会有源源不断的最新Demo。
+以上就是WebGL从零开始的准备工作的教程了。如果你想再了解并且创建你自己的WebGL页面，请继续下一课。
+
+疑难解答
+
+Mac
+
+对于在Mac上运行WebGL我没有任何的建议和意见，因为从来没人问过我我也从来没有在论坛上见过有人提问。所以我得出结论，一切在OS X上都是完美的！
+
+Windows
+
+最常见的问题就是你没有正确安装DirectX运行库，它可以在微软网站上免费下载，所以下载并且安装吧！另外需要提醒的是，你还要注意更新你的显卡驱动，使用Windows Update或者去你的显卡制造商的网站，当然最好是去驱动之家。如果WebGL还是不能正常工作，那说明你的显卡驱动被列入了黑名单当中。虽然这种情况非常罕见，比在Linux下更加罕见，但是它的确被报告发生过。参考下面的Linux部分，可能会找到好的建议。
+
+Linux
+
+在Linux下最常见的错误都是因为显卡驱动的问题。目前所有的Linux的浏览器都是基于OpenGL技术，而OpenGL的支持则依赖于你的显卡驱动。WebGL需要OpenGL 2.0或者更高才能够运行；特别是Intel的集成显卡，Intel公司至今仍未放出支持OpenGL 2.0或更高版本的的显卡驱动。如果你使用的是Intel的集成显卡，请尝试使用Mesa来进行软件加速。如果这还不行，请留下评论，我会试着帮助你解决。
+
+如果你使用的是AMD（ATI）或NVIDIA显卡，首先请检查你电脑上的OpenGL的版本。运行glxinfo命令找到“OpenGL version string”这一行。如果版本号小于2.0，那么你需要更新你的显卡驱动。在你的电脑/显卡制造商的网站和软件包管理器里找找，另外最好是去驱动之家。
+
+如果你仍然不能运行WebGL，那可能是你的显卡驱动被列入了黑名单当中；这是因为其中的一些驱动不够稳定经常会导致系统崩溃，可以理解，因为这并不是人们希望的。如果你想要冒着崩溃的风险尝试WebGL，你可以用如下的命令行参数启动Chrome：–ignore-gpu-blacklist。如果仍然没有解决问题，那只能说明还没有足够好的OpenGL驱动来匹配你的显卡硬件。现在你只有一条路可选，就是使用软件加速。回到上面重新看一下如何使用Mesa进行软件加速吧。
+
+感谢
+
+感谢 Vladimir Vukićević、Mohamed Mansour、Ehsun Amanolahi和Chris Marrin提供的信息让我完成本页现在和之前的内容。[Lesson 0完]

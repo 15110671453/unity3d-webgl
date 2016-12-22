@@ -1,0 +1,311 @@
+Lesson 5 引入纹理贴图
+By adminOn 2011 年 9 月 9 日29 条评论 6,537 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com
+
+欢迎来到Lesson 5，本节课是基于NeHe的OpenGL教程的第六课改编的。这节课，我们将会给3D物体加入纹理贴图——也就是说我们会载入一个独立的图片文件来覆盖3D物体。这对于增加3D场景的细节非常有用，你不必绘制非常非常复杂的单个物体。比如说在一个迷宫游戏中有一栋石头墙，你不必为每个石块都制作单独的模型，而只需要将整栋墙体都做成一个模型，然后用一张石头的图片来覆盖到墙上就可以了。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+译者注：因为从本节课开始要载入本地资源（纹理），所以请使用Chrome浏览器的读者为Chrome增加如下命令行：“–allow-file-access-from-files”;请使用Firefox的读者打开about:config配置页面，找到“security.fileuri.strict_origin_policy”项，并将其设置为“false”。除此之外，你也可以安装一个web服务器，然后通过服务器加载电脑上的资源。具体的设置办法可以看首页的大按钮。
+
+简单来说，纹理贴图的原理就是用特殊的方法来设置3D物体中某个点的颜色。你应该会记得在第二课中，我们讲过颜色是由片元着色器指定的，所以我们需要载入图片然后将它输送到片元着色器。另外，片元着色器也需要知道当前片元应当使用纹理的哪一部分，所以我们也需要把纹理的使用位置信息， 也就是纹理坐标， 传给片元着色器。
+
+让我们先从载入纹理的代码开始看起，首先是从页面一被载入就立即执行的webGLStart函数，第336行就是新增加的代码：
+
+327
+328
+329
+330
+331
+332
+333
+334
+    function webGLStart() {
+        var canvas = document.getElementById("lesson05-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        initTexture();
+ 
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+于是让我们看看initTexture函数，大约在页面代码的三分之一的位置，这是一个全新的函数：
+
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+    var neheTexture;
+ 
+    function initTexture() {
+        neheTexture = gl.createTexture();
+        neheTexture.image = new Image();
+        neheTexture.image.onload = function () {
+            handleLoadedTexture(neheTexture)
+        }
+ 
+        neheTexture.image.src = "nehe.gif";
+    }
+我们建立了一个全局变量用来储存纹理，显然在真正的应用中会有很多纹理，所以不应该使用全局变量，但在这里我们是为了讲解更加清楚。我们使用gl.createTexture来建立了一个纹理对象，并赋值给全局变量；然后我们建立了一个Javasript图片对象（Javascript Image Object），并把它放到我们给纹理对象添加的一个新属性中，这里我们又用到了Javasript的那个优点，就是可以给任何对象添加任何属性——纹理对象本身默认并不含有一个图片属性，但是显然我们需要这样一个属性，所以我们就手动为它增加这样一个属性。下一步就应该将图片文件载入到图片对象中了，但是在这之前我们加入了一个回调函数，它在图片被完全载入后将被调用，所以我们最好先设置好。最后，我们设置好图片的src属性。完成后，图片将被异步加载——也就是说，设置图片src属性的代码将会立即执行并返回，而一个后台线程将会从服务器上将图片载入。
+
+119
+120
+121
+122
+123
+124
+125
+126
+    function handleLoadedTexture(texture) {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+首先我们必须告诉WebGL我们的纹理是“当前纹理”。和之前我们见过的bindBuffer一样，需要用bindTexture将纹理与WebGL上下文绑定，设置其为当前纹理，而不能直接作为参数使用某个纹理。
+
+然后，我们告诉WebGL所有被载入纹理的图片都需要做一个垂直翻转。为什么要进行垂直翻转呢？这都是坐标闯的祸。对于我们的纹理坐标，我们使用的坐标系和你平常在数学课上用到的是相同的，即在垂直坐标轴上，越往上坐标值越大；这与我们一直用来指定顶点位置的X、Y、Z轴的坐标系统也是一致的。但是，在其他大多数计算机图形系统中情况正好相反，在垂直坐标轴上，越往下坐标值反而越大，就比如我们用来储存纹理的GIF格式图片。这种垂直坐标轴上的差异意味着在WebGL的透视中，我们使用的GIF图片实际上已经被翻转过了，所以我们需要翻转回来，或许可以称之为“逆翻转”。
+
+下一步我们就要使用texImage2D方法，将刚刚被载入还冒着热气的新出炉的图片上传到显卡端的纹理空间中。函数的参数按顺序分别是，图片类型、细节层次（我们以后的课程中会详细讲解）、图片各通道的大小（也就是用于储存R、G、B值的数据类型）、最后是图片本身。
+
+紧接着的下面两行的代码是用于指定纹理的特殊缩放参数的。第一行代码告诉WebGL当纹理被填充到一个相对于图片尺寸较大的屏幕空间时应当怎么做，换句话说，就是告诉WebGL如何放大纹理。同样，第二行代码则告诉WebGL如何缩小纹理。有很多种缩放方式供你选择，而NEAREST是其中最不酷的一种，它用来指定说无论如何都只使用原始图片，也就是说原始图片什么样，纹理就什么样，所以当你近距离观看时，将会看到非常斑驳的纹理。然而，这也有它的好处，那就是执行速度非常快，即使在非常慢的电脑上。在下一节课中，我们会使用到其他的缩放方式，到时你将体会到它们在效果和性能上的不同。
+
+完成之后，我们将当前纹理设置为null，严格来讲这不是必须的，但这样的一个清理工作却是一个好的编程习惯。
+
+以上就是载入纹理所需的所有代码。下面，我们把注意力转移到initBuffers上。首先显而易见的是，我们把在第四课中用到的所有与锥形有关的代码都移除掉了；另外，我们用一个新的数组——纹理坐标数组——替换了立方体的顶点颜色数组。
+
+215
+216
+217
+218
+219
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+233
+234
+235
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+248
+249
+250
+251
+252
+253
+254
+255
+256
+        cubeVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+        var textureCoords = [
+          // Front face
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+ 
+          // Back face
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+ 
+          // Top face
+          0.0, 1.0,
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+ 
+          // Bottom face
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+          1.0, 0.0,
+ 
+          // Right face
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+ 
+          // Left face
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STATIC_DRAW);
+        cubeVertexTextureCoordBuffer.itemSize = 2;
+        cubeVertexTextureCoordBuffer.numItems = 24;
+现在再来看这样的代码，你应该感到非常轻松了。我们所做的就是在每个数组对象中增加了一个新的顶点属性，每个顶点上这个属性有两个值。纹理坐标指定的是在笛卡尔x,y坐标系中顶点位于纹理中的位置。为了实现纹理坐标，我们把纹理的宽和高都看成1.0，这样（0,0）就是左下角，（1,1）就是右上角。而从这样的假想转换到纹理图片的真实分辨率的工作，都是由WebGL来完成的。
+
+以上就是initBuffers函数中的变化，下面我们来看看drawScene函数。不言自明，函数最大的变化就是加入了使用纹理的代码。在这之前我们先来处理一下那些琐碎的小变动，例如我们移除了和锥形有关的代码，另外立方体旋转的方向也发生了变化。想必你已经可以轻松理解这些代码了，所以我也不再花时间详细讲解了。
+
+274
+275
+276
+277
+278
+279
+280
+281
+282
+283
+284
+285
+286
+287
+288
+289
+290
+    var xRot = 0;
+    var yRot = 0;
+    var zRot = 0;
+ 
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+ 
+        mvMatrix = okMat4Trans(0.0, 0.0, -5.0);        
+        mvMatrix.rotX(OAK.SPACE_LOCAL, xRot, true);
+        mvMatrix.rotY(OAK.SPACE_LOCAL, yRot, true);
+        mvMatrix.rotZ(OAK.SPACE_LOCAL, zRot, true);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+另外在animate函数中也有相应的修改用来配合xRot、yRot和zRot，这我也不会多讲。
+
+好了，终于是时候来看看纹理相关的代码了。在initBuffers函数中我们建立了包含纹理坐标的数组对象，现在我们需要将它绑定到合适的属性中，以便着色器可以调用它。
+
+292
+293
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+那么，现在WebGL已经知道各个顶点该使用纹理的哪个点了，下面我们需要告诉WebGL使用我们之前载入的纹理来绘制立方体。
+
+295
+296
+297
+298
+299
+300
+301
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, neheTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+ 
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+这段代码有点复杂。WebGL可以在调用像gl.drawElements这种函数中处理最多32个纹理对象，从TEXTURE0到TEXTURE31，这些纹理被一一标记。前两行代码所做的就是将我们刚刚载入的纹理指定为0号纹理，在第三行代码中我们将0这个值推送到着色器的uniform变量中（和其他我们用于处理矩阵的uniform变量一样，都是从initShaders函数中的着色器program对象中提取出来的），告诉着色器我们要使用0号纹理。
+
+不管怎样，现在我们已经可以说是蓄势待发了。我们用相同的代码来绘制一堆三角形最后组成一个立方体。
+
+最后剩下一件事，就是要解释一下着色器的变化。让我们先来看看顶点着色器。
+
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+    attribute vec3 aVertexPosition;
+    attribute vec2 aTextureCoord;
+ 
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+ 
+    varying vec2 vTextureCoord;
+ 
+ 
+    void main(void) {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+        vTextureCoord = aTextureCoord;
+    }
+这和我们在第二课中给顶点着色器填充一些与颜色相关的东西非常相似，我们所做的就是将纹理坐标设置为顶点属性，然后以Varying变量的形式直接从顶点着色器中传出。
+
+当每个顶点都设置完毕后，WebGL都会将顶点与顶点之间的片元（基本上可以理解为像素）进行线性插值，就像第二课中处理颜色一样。所以，在纹理坐标为（1,0）和（0,0）中间的片元会得到一个（0.5,0）的纹理坐标，在纹理坐标为（0,0）和（1,1）之间的片元会得到一个（0.5,0.5）的纹理坐标。然后在片元着色器中：
+
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+ 
+    precision mediump float;
+ 
+ 
+    varying vec2 vTextureCoord;
+ 
+    uniform sampler2D uSampler;
+ 
+    void main(void) {
+        gl_FragColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+    }
+我们获取到了线性插值后的纹理坐标，并且以sampler类型的形式储存在变量中，它在着色器中代表纹理。在drawScene函数中，我们的纹理与gl.TEXTURE0绑定在一起，而uniform变量uSampler的值是0，所以这个sampler变量代表的正是我们的纹理。着色器所做的就是调用texture2D，并根据坐标从纹理中获得相对应的颜色。另外，纹理坐标通常使用s和t来表示，而不是x和y；不过别担心，着色器语言支持别名，所以我们可以依然可以方便的使用vTextureCoord.x和 vTextureCoord.y。
+
+在片元获得颜色之后，我们就成功地在屏幕上绘制出了一个带纹理贴图的物体。
+
+好了，在这节课中你学到了如何在WebGL中为3D物体增加纹理，如何载入图片并作为纹理来使用它，如何为物体赋予纹理坐标，以及在着色器中使用纹理和纹理坐标。
+
+如果你有任何的问题、评论或是纠正，都请留言给我。
+
+在下一课中，我们将会用Javascript为你的3D场景增加基本的键盘输入，以便制作出可以与人互动的网页。我们将会允许观看者改变立方体的旋转、缩放以及调整WebGL缩放纹理的方式。

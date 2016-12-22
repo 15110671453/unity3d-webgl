@@ -1,0 +1,321 @@
+Lesson 2 添加颜色
+By adminOn 2011 年 8 月 22 日13 条评论 5,860 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com
+
+欢迎来到WebGL教程的第二课。在这节课中我们将会研究一下如何给场景中的物体上色。本节课的内容是基于NeHe的OpenGL教程的第三章改写的。
+下面的图片（图片！）就是我们今天课程中要用WebGL实现的最终效果。
+
+
+
+点击这里你会看到一个独立的WebGL页面。如果你的浏览器不支持WebGL，请点击这里。
+
+下面开始说说它是如何工作的……
+
+事先声明一下，本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读第一课，请先看一下第一课的内容吧。因为本课中我只会讲解那些与第一课中不同的新知识。
+照旧说一下，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；你也可以点击这里，下载我们为您打包好的压缩包。
+
+大部分代码看起来都和第一课的类似，从头到尾的过程依次是：
+
+定义顶点着色器和片元着色器，代码放到HTML的<script>标签中，使用的类型是“x-shader/x-vertex”和“x-shader/x-fragment”；
+在initGL函数中初始化WebGL上下文（WebGL Context）；
+使用getShader和initShaders函数将着色器载入到WebGL的program对象中；
+定义模型视图矩阵（mvMatrix）和投影矩阵（pMatrix），并使用setMatrixUniforms函数将他们从Javascript推送的WebGL中，也就是显卡段，使得着色器可以调用它们；
+使用initBuffers函数载入含有场景内物体信息的数组对象；
+使用名如其义的函数drawScene函数来绘制场景；
+建立一个webGLStart函数，在页面加载时被调用，完成上述的一切；
+最后，在HTML代码中加入一段canvas标签的内容，来显示绘制的场景。
+与第一节课的不同的几个地方是着色器、initBuffers和drawScene函数的代码。为了了解这些改变的代码的原理，你需要先了解一下WebGL的渲染管线。这里有个流程图：
+
+
+
+这个流程图用简单的形式表现出数据从Javascript的drawScene函数中转换为像素显示在WebGL Canvas中的流程。另外，这个流程图只给出了我们这节课需要用到的步骤，我们在以后的课程中还会为这个流程图添加更多细节，并进行讲解的。
+
+从最高层开始，处理的过程是这样的：每次你调用类似于drawArrays的函数时，WebGL会处理你之前传递给它的数据，这些数据都是以属性（Attribute）（比如第一课中我们用到的顶点位置数组）和Uniform变量（我们用它来储存模型视图矩阵和投影矩阵）的形式存在的，然后WebGL会把这些数据传递给顶点着色器。
+
+每次当相应顶点的属性建立完成后，都会调用一次顶点着色器；而Uniform变量，就像它的名字一样，在调用过程中并不发生任何改变，顶点着色器只是需要这些数据——在第一课中，这些数据代表着模型视图矩阵和投影矩阵，使得顶点可以被放置到透视中并且调整到当前的模型视图状态下——然后顶点着色器把处理的结果储存在称为“Varying变量”（Varying Variable）的变量中。顶点着色器通常会输出一系列的Varying变量，其中有个特别的也是必须的变量，那就是gl_Position，它储存着经过顶点着色器处理过的顶点坐标。
+
+在顶点着色器处理完成之后，WebGL将会神奇般的将这些Varying变量中描述的3D图形转换为2D图片，然后为图片中的每个像素调用片元着色器（这就是为什么在有些3D图形系统中你会听到他们把片元着色器称为“像素着色器”的原因了）。当然，确切的说是为那些非顶点位置的像素调用片元着色器，而在那些顶点位置上的像素则已经建立好了顶点。这个过程“填充”了各顶点间限定的空间，从而显示出一个可见的形状。片元着色器的作用是返回每个内插点的颜色，并储存在称为gl_FragColor的Varying变量中。
+
+当片元处理器工作完毕后，WebGL会再处理一下它输出的结果（我们在以后的课程中会讲到这个“再处理一下”的详细内容），然后放到Frame Buffer（帧缓冲）中，也就是最终显示在屏幕上的东西。
+
+好了，到此为止我们应该可以看出来这节课的关键就是如何从Javascript代码中获取顶点颜色并传送给显卡段的片元着色器，尤其是在现在我们没有权限直接进行传递的时候，我们该怎么办。
+
+要达到这个目的，简单地说就是利用之前提到的，我们可以从顶点着色器中输出包括位置信息在内的一系列Varying变量，然后在片元着色器中重新获得他们。所以，我们要把颜色信息传递给顶点着色器，然后再直接输出为Varying变量，使片元着色器可以获取到它们。
+
+这种方式下我们可以很容易填充渐变色。因为所有顶点着色器输出的Varying变量都在顶点间产生片元的时候被进行了线性插值，注意是所有Varying变量而不仅仅是位置信息。顶点间颜色信息的线性插值可以让我们制作平滑的渐变，就像你看到的上面的那个三角形。
+
+好了，是时候看看代码了。我们将会着重讲解那些与第一课不同的地方。首先，让我们先来看看顶点着色器，这部分的代码改变了不少，下面是新增加的代码。
+
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+  attribute vec3 aVertexPosition;
+  attribute vec4 aVertexColor;
+ 
+  uniform mat4 uMVMatrix;
+  uniform mat4 uPMatrix;
+ 
+  varying vec4 vColor;
+ 
+  void main(void) {
+    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+    vColor = aVertexColor;
+  }
+你可以看到，我们现在有两个描述各顶点间变化的属性（Attribute）了，一个是aVertexPosition，另一个是aVertexColor；还有两个不变的Uniform量，uMVMatrix和uPMatrix；以及一个作为Varying变量输出的的vColor。
+
+在这段顶点着色器的代码中，我们像第一节课一样来计算gl_Position（在每一个顶点着色器中，它被隐性定义为一个Varying变量），而我们对于颜色信息的处理就是从Attribute那里得到它们，然后原封不动的输出为Varying变量。
+
+在这一步骤完成的同时，用于产生片元的插值运算也就完成了，然后数据会传送给片元着色器。
+
+7
+8
+9
+10
+11
+12
+13
+14
+15
+ 
+  precision mediump float;
+ 
+ 
+  varying vec4 vColor;
+ 
+  void main(void) {
+    gl_FragColor = vColor;
+  }
+在定义了中等精度的浮点值之后，我们把储存有平滑的混合颜色并经过线性插值运算的Varying变量VColor，直接立即作为颜色返回给片元着色器。
+
+这就是本节课与上节课的主要不同点。另外还有两个不同的地方。第一个变化非常小，在initShaders函数中，我们引用了2个属性值（Attribute）而不是1个，请参考下面的代码中的第107行和第108行。
+
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+108
+109
+110
+111
+112
+  var shaderProgram;
+ 
+  function initShaders() {
+    var fragmentShader = getShader(gl, "shader-fs");
+    var vertexShader = getShader(gl, "shader-vs");
+ 
+    shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+ 
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+      alert("Could not initialise shaders");
+    }
+ 
+    gl.useProgram(shaderProgram);
+ 
+    shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+ 
+    shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+    gl.enableVertexAttribArray(shaderProgram.vertexColorAttribute);
+ 
+    shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram, "uPMatrix");
+    shaderProgram.mvMatrixUniform = gl.getUniformLocation(shaderProgram, "uMVMatrix");
+  }
+这段代码是用来获得属性地址的，在第一节课中我们讲过这一部分，大家现在应该明白我们是如何引用一个我们想要传递给顶点着色器的属性值了吧。在第一节课中我们只是引用了顶点位置属性，现在显然不够了，我们还要加上颜色属性。
+
+第二个不同点就是initBuffers，现在需要为顶点位置和顶点颜色同时建立数组对象。在drawScene函数中，这两者都要被推送到WebGL中。
+
+先来看看initBuffers，我们定义了一个新的全局变量来储存三角形和矩形的颜色信息。
+
+124
+125
+126
+127
+  var triangleVertexPositionBuffer;
+  var triangleVertexColorBuffer;
+  var squareVertexPositionBuffer;
+  var squareVertexColorBuffer;
+然后，在我们建立了三角形的顶点位置数组之后，就开始指定它的顶点颜色，请看下面代码中从第141行到第150行的部分：
+
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+  function initBuffers() {
+    triangleVertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+    var vertices = [
+         0.0,  1.0,  0.0,
+        -1.0, -1.0,  0.0,
+         1.0, -1.0,  0.0
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    triangleVertexPositionBuffer.itemSize = 3;
+    triangleVertexPositionBuffer.numItems = 3;
+ 
+    triangleVertexColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+    var colors = [
+        1.0, 0.0, 0.0, 1.0,
+        0.0, 1.0, 0.0, 1.0,
+        0.0, 0.0, 1.0, 1.0
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+    triangleVertexColorBuffer.itemSize = 4;
+    triangleVertexColorBuffer.numItems = 3;
+我们用列表的形式给每个顶点赋予颜色值，就像位置信息一样。然而，在两个数组对象之间有一个很有意思的区别，每个位置信息只需要3个数字，分别代表X轴、Y轴和Z轴的坐标，但每个颜色信息需要4个数字，分辨代表红、绿、蓝和透明度（R, G, B and Alpha）。透明度的意思就是颜色的透明程度（0代表完全透明，1代表完全不透明），我们在以后的课程中会经常用到它。这个在数组成员数量上的改变，同样也需要反映到我们建立的用来描述它们的itemSize上。
+
+下面，我们用类似的代码来绘制矩形。这一次，因为是一个纯色的矩形，所以我们要为每个顶点赋予相同的颜色值，我们使用一个循环来实现，请看代码中的第165行到第173行的部分。
+
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
+170
+171
+172
+173
+    squareVertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+    vertices = [
+         1.0,  1.0,  0.0,
+        -1.0,  1.0,  0.0,
+         1.0, -1.0,  0.0,
+        -1.0, -1.0,  0.0
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    squareVertexPositionBuffer.itemSize = 3;
+    squareVertexPositionBuffer.numItems = 4;
+ 
+    squareVertexColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+    colors = []
+    for (var i=0; i < 4; i++) {
+      colors = colors.concat([0.5, 0.5, 1.0, 1.0]);
+    }
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+    squareVertexColorBuffer.itemSize = 4;
+    squareVertexColorBuffer.numItems = 4;
+现在，我们已经成功的为需要绘制的形状建立起4个数组对象，下面我们要修改一下drawScene函数，使它使用到这些新数据。下面代码中第189行、第190行、第199行和第200行就是需要修改的代码，应该非常好理解：
+
+178
+179
+180
+181
+182
+183
+184
+185
+186
+187
+188
+189
+190
+191
+192
+193
+194
+195
+196
+197
+198
+199
+200
+201
+202
+203
+204
+  function drawScene() {
+    gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+    pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+ 
+    mvMatrix = okMat4Trans(-1.5, 0.0, -7.0);
+ 
+    gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+    gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, triangleVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+    setMatrixUniforms();
+    gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+ 
+    mvMatrix = okMat4Trans(1.5, 0.0, -7.0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+    gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+    setMatrixUniforms();
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+  }
+然后下面我们需要修改的是……慢着！已经不需要修改别的了！以上就是我们需要做的，用来给WebGL场景添加颜色。希望你能理解那些有关着色器的基本知识，以及是如何在着色器之间传递数据的。
+
+这就是我们第二节课的所有内容，是不是比第一课轻松多了呢？如果你有任何的疑问、建议或者意见，都请给我留言！

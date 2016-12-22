@@ -1,0 +1,374 @@
+Lesson 9 优化代码结构实现多物体运动
+By adminOn 2011 年 9 月 20 日2 条评论 2,078 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到WebGL教程的第9课，这节课的内容是基于NeHe的OpenGL教程的第9节改编的。这节课中，我们将使用Javascript对象来实现3D场景中的多个独立的运动物体。我们还会涉及到如何更改加载纹理的颜色以及如何混合纹理。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。你会看到大量的不同颜色的星星，不断盘旋。
+
+你可以点击画布下方的复选框来开启或关闭“闪光”效果（我们一会就会讲解到）。你还可以使用方向键来使星星围绕着X轴运动，并使用Page Up键和Page Down键来进行缩放。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+要讲清楚这节课与上节课不同的地方，最好的办法就是从代码底部开始，从webGLStart函数开始，下面就是本节课中的webGLStart函数：
+
+391
+392
+393
+394
+395
+396
+397
+398
+399
+400
+401
+402
+403
+404
+405
+    function webGLStart() {
+        var canvas = document.getElementById("lesson09-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        initTexture();
+        initWorldObjects();
+ 
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+ 
+        document.onkeydown = handleKeyDown;
+        document.onkeyup = handleKeyUp;
+ 
+        tick();
+    }
+发生变化的代码位于第397行。我们新调用了一个initWorldObjects函数。这个函数创建了Javascript对象，我们很快就要讲到。但这之前我们还需要说一下一个非常细微的变化，那就是之前我们的webGLStart函数中都有下面一行代码来开启深度检测：
+
+1
+    gl.enable(gl.DEPTH_TEST);
+但是在这一课的例子中我们移除了这行代码。你也许还记得，在上一课中，混合和深度检测这两位小朋友总是玩不到一起去。在这节课中我们将全时使用混合，而深度检测默认是关闭的，所以移除这行代码可以满足我们的需求。
+
+下面一个重大的变化位于animate函数中。之前我们一直使用这个函数来更新全局变量以便实现场景中的动画效果——例如，在绘制立方体之前旋转角度的全局变量。这节课中我们还是要做类似的事情，但不是直接更新变量，而是遍历场景中的物体，让它们自己运动。
+
+368
+369
+370
+371
+372
+373
+374
+375
+376
+377
+378
+379
+    function animate() {
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+            var elapsed = timeNow - lastTime;
+ 
+            for (var i in stars) {
+                stars[i].animate(elapsed);
+            }
+        }
+        lastTime = timeNow;
+ 
+    }
+让我们继续，下面来看看drawScene函数。我不打算直接标出发生变化的所有代码，而是一点一点的来慢慢看。首先：
+
+345
+346
+347
+348
+349
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+以上是我们进行场景基本设置的代码，它从第一节课开始就没有变过。
+
+351
+352
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+        gl.enable(gl.BLEND);
+接着，我们开启了混合。我们和上节课一样，使用同样的混合方法。你应该还记得，这项技术允许物体互相“透过”彼此。有用的是，这也就意味着，在绘制时，物体的黑色部分会被当成是透明的。如果想不明白其中的原理，请参考上一节课中我们对混合的讲解。也就是说，当我们绘制场景中的星星的时候，黑色的部分会看起来是透明的；进一步说，星星中不那么明亮的部分，看起来就会更透明一些。我们使用下面这个纹理来绘制星星
+
+
+
+这恰好给了我们想要的效果。
+
+接下来的代码是：
+
+354
+355
+        mvMatrix = okMat4Trans(0.0, 0.0, zoom); 
+        mvMatrix.rotX(OAK.SPACE_LOCAL, tilt, true);
+这里我们移动到了场景中央，并进行了合适的缩放。我们还让场景绕着X轴倾斜，在这里依然使用tilt这个全局变量来接收来自于键盘的输入，控制倾斜角度。好了，现在差不多就要开始绘制场景了。我们先检测一下“闪光”复选框是否被选中。
+
+357
+        var twinkle = document.getElementById("twinkle").checked;
+然后，就和我们刚才让星星自己运动一样，通过循环迭代来绘制每一颗星星。我们传入当前场景的倾斜角度（tilt）和闪光值（twinkle）。另外还有一个当前的“旋转（spin）”值，用于让星星在围绕场景中心公转的同时，还围绕自己的中心进行自转。
+
+358
+359
+360
+361
+362
+363
+        for (var i in stars) {
+            stars[i].draw(tilt, spin, twinkle);
+            spin += 0.1;
+        }
+ 
+    }
+好了，以上就是drawScene函数。我们可以清晰的看到，星星自主地被绘制出来和运动起来。接着往上看就是创建星星的代码：
+
+334
+335
+336
+337
+338
+339
+340
+341
+342
+    var stars = [];
+ 
+    function initWorldObjects() {
+        var numStars = 50;
+ 
+        for (var i=0; i < numStars; i++) {
+            stars.push(new Star((i / numStars) * 5.0, i / numStars));
+        }
+    }
+通过一个简单的循环，我们创建了50颗星星（你也可以增加或减少星星的数量）。每颗星星被赋予的第一个参数用于指定距离场景中心的初始距离，第二个参数用于指定围绕场景中心公转的速度，这两个参数都是根据位置计算出来的。
+
+下面，我们要看一看如何定义星星的类。如果你对Javascript并不熟悉，那这些代码看起来会有些奇怪。（如果你已经非常了解Javascript，那请略过这一部分关于建立对象模型的讲解吧！）
+
+Javascript对象模型与其它语言有很大的不同。你可以将js对象理解为一个字典容器（哈希表，关联数组），对象成员作为数据放在对象容器中，由对象名称索引。所以，在Javascript中，当你像其它语言一样使用foo.bar形式调用成员时，实际上，你是在访问foo这个字典容器中的以bar为索引关键字的数据，即foo[“bar”]。
+
+对于每个Javascript函数，都有一个特殊的私有变量“this”, 表示当前函数的“拥有者”。对于全局函数，this指向网页中的“windows”对象。如果你在引用this的前方加new关键字，那它的意义就不再是指向当前函数的拥有者，而是创建一个新的对象。所以，如果你有一个函数，在函数体内部将this.foo设置为1，this.bar设置为一个函数，并确保在调用此函数前使用new关键字， 那它的功能基本上等同于带class定义的类构造函数。
+
+接下来，我们需要注意，如果一个函数在调用时指明了调用者（例如foo.bar()），那此函数在调用过程中就绑定在了它的调用者身上，正像大多数开发者希望的那样，通过这种方式我们可以让函数调用的内容只作用于它的调用者。
+
+最后，对于每个函数，都有一个特殊的属性：prototype。prototype是一个字典容器，它内部存储了当使用new关键字创建此对象的副本时，所需要创建的成员变量。这是一种良好的定义Javascript“类”对象通用成员的方式——比如，类方法。
+
+好了，让我们来看看定义Star对象的代码。
+
+265
+266
+267
+268
+269
+270
+271
+272
+    function Star(startingDistance, rotationSpeed) {
+        this.angle = 0;
+        this.dist = startingDistance;
+        this.rotationSpeed = rotationSpeed;
+ 
+        // Set the colors to a starting value.
+        this.randomiseColors();
+    }
+在这个构造函数中，我们先初始化了星星，使其角度为0，然后又调用了一个方法。接下来我们要把几个方法绑定到Star函数相关的prototype上，让所有新创建的Star对象都有相同的方法。首先要绑定的方法是draw。
+
+274
+275
+    Star.prototype.draw = function (tilt, spin, twinkle) {
+        mvPushMatrix();
+draw方法被定义为将我们传入的参数带入到drawScene主函数中。我们一开始先把当前模型视图矩阵压入栈中，以此避免之前课程中提到过的副作用。
+
+277
+278
+279
+        // Move to the star's position
+        mvMatrix.rotY(OAK.SPACE_LOCAL, this.angle, true);
+        mvMatrix.translate(OAK.SPACE_LOCAL, this.dist, 0.0, 0.0, true);
+然后，我们根据星星的角度值绕着Y轴旋转一下，然后根据星星的距离值移出场景中心。这让我们到达了绘制星星的正确位置。
+
+281
+282
+283
+        // Rotate back so that the star is facing the viewer
+        mvMatrix.rotY(OAK.SPACE_LOCAL, -this.angle, true);        
+        mvMatrix.rotX(OAK.SPACE_LOCAL, -tilt, true);
+这几行代码用于确保星星始终面对观察者，尤其是当接受键盘输入来控制场景的倾斜角度的时候。星星都是使用一个绘制在正方形中的2D纹理来贴图的，我们竖着看的时候是正常的；但是当场景倾斜的时候，那我们就只能看到它们的一侧了。所以，我们在放置星星的时候还需要还原这个旋转。当你做“逆旋转”的时候，你需要逆着一开始执行的顺序倒着回去。所以我们先还原了旋转，然后再做倾斜（这是在drawScene函数中完成的）。
+下面就要开始绘制星星了。
+
+285
+286
+287
+288
+289
+290
+291
+292
+293
+294
+295
+296
+        if (twinkle) {
+            // Draw a non-rotating star in the alternate "twinkling" color
+            gl.uniform3f(shaderProgram.colorUniform, this.twinkleR, this.twinkleG, this.twinkleB);
+            drawStar();
+        }
+ 
+        // All stars spin around the Z axis at the same rate
+        mvMatrix.rotZ(OAK.SPACE_LOCAL, spin);
+ 
+        // Draw the star in its main color
+        gl.uniform3f(shaderProgram.colorUniform, this.r, this.g, this.b);
+        drawStar();
+让我们先忽略关于执行“闪光”效果的代码。星星先是根据传入的spin参数围绕Z轴进行自转。然后将星星的颜色通过uniform变量传送到显卡端，然后调用了一个全局函数drawStar（我们稍后讲解）。
+
+现在来看看“闪光”的部分吧？好吧，每颗星星都有两个颜色，一个是正常的颜色，一个是闪光的颜色。在绘制闪光的星星前，我们先绘制了一个正常颜色下的星星。也就是说两个星星会混合在一起，实现了闪光；进一步说，第一次绘制的星星是不动的，而第二次绘制的星星是自转的，两者结合在一起，就给出了我们想要的闪光的效果。
+
+好了，星星绘制完毕，我们要让模型视图矩阵出栈了。
+
+298
+299
+        mvPopMatrix();
+    };
+接下来我们要绑定到prototype上的方法是用来让星星运动的。
+
+302
+303
+    var effectiveFPMS = 60 / 1000;
+    Star.prototype.animate = function (elapsedTime) {
+在之前的课程中，与其让场景更快的更新状态，我选择了更稳健的方式，确保电脑较快的人能得到更平滑的动画效果，而电脑较慢的人也不至于那么糟糕。在本节课的示例中，我觉得让星星围绕场景中心公转、并最终收敛在场景中心的角度的变化速率是NeHe精心计算出来的，所以为了不把它搞乱套，我决定将每秒的帧率定在60fps，然后配合使用elapsedTime变量（你应该还记得，这个变量用来表示animate函数两次调用之间的时间间隔）来控制每次动画效果在“tick”函数中的运动的量。elapsedTime变量的单位是毫秒，所以每毫秒的帧率应当是60/1000。我们把它放到一个animate函数之外的全局变量中，从而保证我们每次绘制星星的时候它不会被重新计算。
+
+现在我们可以根据这个数字调整星星的角度了，也就是星星在围绕场景中心的轨道上可以走多远。
+
+304
+        this.angle += this.rotationSpeed * effectiveFPMS * elapsedTime;
+然后，我们可以调整星星到场景中心的距离，当星星最终到达场景中心的时候，将它移出场景之外，并且重置它的颜色。
+
+306
+307
+308
+309
+310
+311
+312
+313
+314
+        // Decrease the distance, resetting the star to the outside of
+        // the spiral if it's at the center.
+        this.dist -= 0.01 * effectiveFPMS * elapsedTime;
+        if (this.dist < 0.0) {
+            this.dist += 5.0;
+            this.randomiseColors();
+        }
+ 
+    };
+最后一段组成Star对象prototype的代码，是被构造函数调用，以及刚刚在动画中随机生成闪光和非闪光颜色的：
+
+317
+318
+319
+320
+321
+322
+323
+324
+325
+326
+327
+328
+329
+330
+    Star.prototype.randomiseColors = function () {
+        // Give the star a random color for normal
+        // circumstances...
+        this.r = Math.random();
+        this.g = Math.random();
+        this.b = Math.random();
+ 
+        // When the star is twinkling, we draw it twice, once
+        // in the color below (not spinning) and then once in the
+        // main color defined above.
+        this.twinkleR = Math.random();
+        this.twinkleG = Math.random();
+        this.twinkleB = Math.random();
+    };
+这样我们就完成了Star对象的prototype，其中我们建立了一个星星的对象，并且填充了方法来完成绘制和动画。现在，就在这些函数上面你可以看到绘制星星的代码（相当无趣）：用第一节课中我们熟知的方法绘制一个正方形，其中需要正确地使用纹理坐标数组、顶点位置数组……
+
+248
+249
+250
+251
+252
+253
+254
+255
+256
+257
+258
+259
+260
+261
+    function drawStar() {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, starTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, starVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, starVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, starVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, starVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, starVertexPositionBuffer.numItems);
+    }
+再往上你一点，你会看到initBuffers函数，也就是用于建立顶点位置数组和纹理坐标数组的；以及用于处理键盘输入的代码handleKeys函数，当你按下Page Up和Page Down键进行缩放，按下方向键进行倾斜；最后是initTexture和handleLoadedTexture函数，其中加载了新的纹理。这些都很简单，所以我不会再对你进行无聊的说教。
+
+让我们直接看一下着色器部分的代码吧！你会看到这节课中的变化。所有与光照有关的代码都被我们移除出了顶点着色器，现在它的代码和第5课完全一致。而片元着色器则发生了一些有趣的变化。
+
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+ 
+    precision mediump float;
+ 
+ 
+    varying vec2 vTextureCoord;
+ 
+    uniform sampler2D uSampler;
+ 
+    uniform vec3 uColor;
+ 
+    void main(void) {
+        vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+        gl_FragColor = textureColor * vec4(uColor, 1.0);
+    }
+但不是那么有趣。我们所做的就是提取颜色的uniform变量，它是由Star对象的draw方法传送过来的，然后使用它来为纹理着色。因为纹理是单色的，所以星星会显示出我们需要的合适的颜色。
+
+以上就是本课的全部内容！在这节课中，你学会了如何建立Javascript对象来表示场景中的物体，然后赋予它们方法，允许它们独立地绘制和运动。
+
+下节课中，我们将会展示如何从一个单一文件中载入场景，然后看一看如何操纵相机来穿越场景，配合这些制作出一个小的DOOM游戏！

@@ -1,0 +1,165 @@
+Lesson 15 高光贴图
+By adminOn 2011 年 9 月 29 日3 条评论 2,029 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到系列教程的第15课！在这一课中，我们将介绍高光贴图技术。就像普通纹理用来指定物体表面的颜色一样，高光贴图可以用来指定物体表面每一处细节的光照反射程度，因此可以大大增强物体的真实感。本课中并没有太多新增的代码， 只会在前几课基础上进行简单的改动，但从意义上来讲，本课将引入一种全新的概念。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+在本课的演示程序中，你应当会看到一个旋转的地球，地球表面有从太阳反射出的光斑。如果你仔细观察，你会发现高光反射只存在于地球表面的海洋部分，而对于陆地部分，正像你预想的那样，不会反射太阳的光照。
+
+如果你尝试取消“开启高光贴图”选项(此选项位于canvas的下方)。你会发现高光反射就会出现在陆地上，这种效果非常不真实，看起来像是一个超大的聚光灯正在对着地球照射。这就是高光贴图的作用， 它可以允许你精确的控制物体表面的反光细节。
+
+重新打开“开启高光贴图”选项，并降低光源的漫反射强度, 比如将漫反射强度设为(0.5,0.5,0.5), 之后, 再关掉高光贴图， 你会发现地球表面的颜色纹理已经几乎看不到了，但是高光却没有变化，依然同时出现在海洋和陆地区域。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+在解释代码细节之前，让我们先来了解一下背景知识。到目前为止，我们一直将纹理用作一种蒙在物体表面的图像。我们指定一张图像，并为每个顶点设定纹理坐标（纹理坐标标明顶点应该对应到纹理图像中的哪个位置），然后在fragment shader中, 从sampler中取出对应位置的纹理颜色, 并将它作为当前像素的颜色输出。
+
+高光贴图则将我们上面对纹理的认识扩展了一下。一张纹理有R,G, B, A四个通道，在shader中, 每个通道都是一个float类型的标量值, 但并没有限定我们一定要将纹理数据当做颜色来对待。上一课中，我们了了解到，材质的反光度（shinness）也是一个float类型标量值，所以我们可以通过纹理来将物体表面的反光度属性赋给每一个对应的像素，就像我们使用纹理为像素赋颜色一样。
+
+这就是我们在本课中使用的技巧，我们将两张纹理同时传给用于绘制地球的fragment shader，一张用来指定颜色，如下图：
+
+
+
+另一张低分辨率的用来指定反光度：
+
+
+
+上图只是一张普通的GIF图片， 是我在PAINT.NET中通过修改颜色纹理生成的。在本课中，我们假设RGB通道的反光度都是相同的， 同时， 我们需要选择一种颜色作为完全不反光的标志（按照我们的设计，如果需要得到反光度32，则纹理中会存储深灰色（32，32，32）），这里我们指定纯白色为完全不反光。
+
+好了，需要预先解释的都已经说清楚了，下面我们来看代码。本课代码与14课内容只有非常微小的改动，而最主要的部分在fragment shader中，所以在这里我们主要看一下shader部分的内容:
+
+第一个不同是shader多了两个新的uniform常量用来标明是否使用颜色和高光纹理 （第17、18行）：
+
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+ 
+    precision mediump float;
+ 
+ 
+    varying vec2 vTextureCoord;
+    varying vec3 vTransformedNormal;
+    varying vec4 vPosition;
+ 
+    uniform bool uUseColorMap;
+    uniform bool uUseSpecularMap;
+    uniform bool uUseLighting;
+接下来，是两个sampler，用于代表两张纹理。这里将颜色纹理重命名为uColorMapSampler，同时，增加了一个sampler用来表示高光贴图（第27、28行）：
+
+21
+22
+23
+24
+25
+26
+27
+28
+    uniform vec3 uAmbientColor;
+ 
+    uniform vec3 uPointLightingLocation;
+    uniform vec3 uPointLightingSpecularColor;
+    uniform vec3 uPointLightingDiffuseColor;
+ 
+    uniform sampler2D uColorMapSampler;
+    uniform sampler2D uSpecularMapSampler;
+下面，是常规的切换是否进行光照的代码，并计算法线和光照方向：
+
+31
+32
+33
+34
+35
+36
+37
+    void main(void) {
+        vec3 lightWeighting;
+        if (!uUseLighting) {
+            lightWeighting = vec3(1.0, 1.0, 1.0);
+        } else {
+            vec3 lightDirection = normalize(uPointLightingLocation - vPosition.xyz);
+            vec3 normal = normalize(vTransformedNormal);
+最后，就是实际处理高光贴图的代码。首先，我们定义了一个变量用来表示specular光照的权重；如果最终不应进行高光反射，则这个变量将被赋为0。
+
+39
+            float specularLightWeighting = 0.0;
+接下来，开始处理材质的反光度部分。在这里，如果用户选择不使用高光贴图，我们就会默认将反光度初始化为32，否则，我们会从高光贴图中取出对应的反光数值，就像从颜色纹理中取出颜色一样。因为我们假设RGB通道的反光度相同（这就是为什么本课中的高光贴图看起来是一张灰度图），因此在这里我们只取高光贴图纹理的R通道数据，实际上，你从任何一个通道读取，结果都是一样的。
+
+40
+41
+42
+43
+            float shininess = 32.0;
+            if (uUseSpecularMap) {
+                shininess = texture2D(uSpecularMapSampler, vec2(vTextureCoord.s, vTextureCoord.t)).r * 255.0;
+            }
+现在，你需要根据取出的反光度来判断是否需要进行反光，还记得吗？前文中我们提到将纯白色作为不进行反光的标志，因此在这里，我们将只对小于255的反光度进行实际的高光计算。
+
+44
+            if (shininess < 255.0) {
+下面的代码和上一课中的高光计算基本相同，唯一的区别就是这里的反光度是从高光贴图中取出的，而不像之前那样从shader外部传入。
+
+45
+46
+47
+48
+49
+                vec3 eyeDirection = normalize(-vPosition.xyz);
+                vec3 reflectionDirection = reflect(-lightDirection, normal);
+ 
+                specularLightWeighting = pow(max(dot(reflectionDirection, eyeDirection), 0.0), shininess);
+            }
+最后，我们将所有类型的光照元素组合到一起，并使用这个结果作为物体颜色的权重。对于物体颜色，当用户选择使用颜色纹理，也就是uUseColorMap为true的时候，物体颜色是从颜色纹理中取出的，而当不使用颜色纹理时，我们默认认为物体颜色为纯白色。
+
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+            float diffuseLightWeighting = max(dot(normal, lightDirection), 0.0);
+            lightWeighting = uAmbientColor
+                + uPointLightingSpecularColor * specularLightWeighting
+                + uPointLightingDiffuseColor * diffuseLightWeighting;
+        }
+ 
+        vec4 fragmentColor;
+        if (uUseColorMap) {
+            fragmentColor = texture2D(uColorMapSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+        } else {
+            fragmentColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+        gl_FragColor = vec4(fragmentColor.rgb * lightWeighting, fragmentColor.a);
+    }
+当你阅读到这里，你应该已经理解了实现高光贴图所需要的全部知识。除此之外，代码中还有一些其它的改动，但这些细小变化并不值得去细细研究。initShaders函数中添加了用于传输新uniform常量的代码，initTextures则需要加载两张新的纹理，而前一课中加载teapot的代码则被替换为11课中的initBuffers函数，drawScene的内容由绘制茶壶变为了绘制一个球形，同时用户交互UI和animate函数也有对应本课的改动。
+
+That’s it！这就是本课的全部内容。在这一课中，你了解了怎样通过纹理来提供材质反光度所需要的数据，同时，其实你也可以通过纹理来提供其它的表面细节信息，比如，人们经常会用纹理来提供物体表面的法线信息，这样，可以在保持较低顶点数量的前提下，为模型增加一些表面细节，在未来课程中，对这一部分内容我们会特别提到。

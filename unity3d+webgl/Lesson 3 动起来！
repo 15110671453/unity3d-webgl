@@ -1,0 +1,225 @@
+Lesson 3 动起来！
+By adminOn 2011 年 8 月 30 日14 条评论 4,980 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com
+
+欢迎来到Lesson 3！在这一课中我们将开始尝试让物体运动起来。本节课的内容是基于NeHe的OpenGL教程的第四课改写的。
+
+下面的这个视频就是我们这节课要完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读第一课，请先阅读第一课的内容吧。因为本课中我只会讲解那些与第一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；你也可以点击这里，下载我们为您打包好的压缩包。
+
+在开始讲解代码之前，我需要先说明一件事情：在WebGL中的3D场景里移动物体的原理非常简单——你只需要重复的绘制物体就行了，即在每个时刻绘制不同运动状态下的物体！这对于很多读者来说也许是很小儿科的道理，但是在我刚刚开始学习OpenGL的时候却令我大吃一惊，并且对于其他从WebGL入手、刚刚开始接触3D图形系统的人来说可能也是这样的。因为我原以为应该会有个相对高级的抽象概念，用来告诉3D图形系统“一开始我在X点画了一个方块，然后请把它移动到Y点”。事实上正相反，你需要做的是告诉3D图形系统“我一开始在X点画了一个方块，然后下次绘制方块的时候，方块在Y点，再下次绘制的时候，方块在Z点……”。
+
+希望上面这一段内容能够让大家对物体运动的原理有一个清晰明了的认识。如果你还是不明白，请留言告诉我；如果这段话反而让你迷惑了，那也请留言告诉我，我会尝试着解释的更清楚些，或者直接删除这一段话。 ：）
+
+不管怎样，这也就意味着，我们一直用来绘制物体的函数drawScene需要被重复调用，每时每次绘制的内容都有些许不同。让我们先来看看index.html文件代码的底部，从那个搞定一切事情的webGLStart函数开始吧！
+
+257
+258
+259
+260
+261
+262
+263
+264
+265
+266
+267
+    function webGLStart() {
+        var canvas = document.getElementById("lesson03-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+ 
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+ 
+        tick();
+    }
+这个函数和之前唯一的改变就是在最后我们需要调用drawScene函数的地方，我们调用了一个新的函数tick。这就是那个需要重复调用的函数，它用于更新场景的运动状态（比如三角形从81度旋转到82度）、绘制场景以及调整好参数为下次调用做准备。下面我们就先来看看这个函数。
+
+250
+251
+    function tick() {
+        okRequestAnimationFrame(tick);
+第一行的代码是用来安排好在下次重绘时调用tick函数的。okRequestAnimationFrame是一个由Oak3D提供的函数。这个函数可以兼容所有浏览器，让浏览器在需要重绘WebGL场景时调用，比如说刷新显示。简单的说，就是各个浏览器都对需要循环绘制场景以实现动画效果的任务提供了API支持，但是目前各个浏览器提供的API中函数名称都不一样，比如说在Firefox中，这个函数的名字是mozRequestAnimationFrame，但到了Chrome和Safari中，它又改名叫做webkitRequestAnimationFrame。也许在将来的某个时候这些浏览器厂商会在API函数名称上达成一致，但是现在，我们幸好可以使用Oak3D提供的这个okRequestAnimationFrame函数来实现一次调用，所有浏览器适用。
+
+使用Javascript去反复调用drawScene函数，你也许可以达到相似的效果——比如使用Javascript内置的setInterval函数————但请不要这样做！虽然在很久很久以前，几乎所有早期的WebGL程序都是这么做的，包括本教程，它们一直运行的很好，但是直到浏览器出现了标签浏览的功能后，一切都改变了。因为不管动画页面是否处于激活的标签页，即用户当前正在浏览的标签页，setInterval函数都会被持续不断的调用，这就意味着每一分每一秒电脑都会持续渲染每一个打开的WebGL页面，而不管这个页面是否正在前台展示或是被隐藏。这显然是一个很可怕的事情，这也正是引入requestAnimationFrame的原因，它可以只在标签页被激活的时候才会被调用。
+
+然后我们看看tick函数剩下的部分：
+
+252
+253
+254
+        drawScene();
+        animate();
+    }
+每当浏览器需要绘制一帧的时候就会调用tick函数，然后进行绘制，最后更新一下相关参数来为下次调用做准备。我们按照顺序来看看drawScene函数和animate函数。
+
+drawScene函数差不多在index.html文件代码的的三分之二处。首先你会发现在声明函数之前，我们又定义了两个新的全局变量。
+
+195
+196
+    var rTri = 0;
+    var rSquare = 0;
+这两个变量是用来追踪三角形和矩形的旋转的，它们都从0度开始，然后变量值根据时间慢慢增加（一会你就会看到是如何“慢慢增加”的），从而让图形不断旋转。（顺便说一下，本课的实例是一个非常简单的Demo，但是如果在复杂的3D程序中这样滥用全局变量将是一件非常糟糕的事情，我在第9课中会为大家介绍一个更轻巧便捷的方法。）
+
+下一个代码上的变化位于drawScene函数中我们开始绘制三角形的地方。下面我把所有的代码附上，第205行、第207行和第216行就是新增加的代码：
+
+202
+203
+204
+205
+206
+207
+208
+209
+210
+211
+212
+213
+214
+215
+216
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+        mvMatrix = new okMat4();
+ 
+        mvPushMatrix();
+        mvMatrix.translate(OAK.SPACE_WORLD, -1.5, 0.0, -7.0, true);
+        mvMatrix.rotY(OAK.SPACE_LOCAL, rTri, true);
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, triangleVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+        mvPopMatrix();
+为了解释上面的代码，让我们先回到第一课，在第一课中我曾经说过：
+
+在OpenGL中，当你想要绘制一个场景的时候，你会告诉OpenGL在当前位置、按照当前旋转角度来绘制每个物体。比如，你说“向前移动20个单位，旋转32度，绘制一个机器人”，这基本上就是一个“位移多少多少，旋转多少多少，画什么什么”的综合过程。这个过程非常实用，因为你可以把“绘制机器人”的代码封装到一个函数中，然后就可以修改函数中位移和旋转的参数来轻松实现机器人的移动。
+
+如果你还记得物体的当前状态都储存在模型视图矩阵中，那么在
+
+207
+        mvMatrix.rotY(OAK.SPACE_LOCAL, rTri, true);
+这条语句中的调用mvMatrix的目的就显而易见了：我们改变了储存在模型视图矩阵中的当前的旋转状态——围绕着垂直轴（由第三个参数指定）旋转rTri度。这意味着当绘制三角形的时候，它会被旋转rTri度。说明一下，在Oak3D中旋转角度都是以角度为单位，而不是弧度，这大大方便了我们，不需要再将相对难以理解的弧度制转换为角度制。（译者注：原文中作者使用了其他第三方库，使用的是弧度制，作者也认为使用角度值比较方便，于是还专门写了一个函数用来将角度值转换为弧度制，但是在本文中这个函数并不需要，所以我们就略去了，有需要的同学可以查看原文教程，找到那个函数，名字是degToRad。）
+
+那么，调用mvPushMatrix和mvPopMatrix又是怎么回事呢？就和它们的函数名一样，它们也与模型视图矩阵有关。回到我说的关于画机器人的那个例子，比如你要移动到A点，画一个机器人，然后从A点做一个位移，移动到另一个点画一个茶壶。画机器人的代码可能会对模型视图矩阵做出面目全非的改变；它可能是先画身体，先后移下来画腿，最后再移上去画头部，最后画完胳膊结束。问题在于，在这之后，当你试图位移到另外一个点，你以为会以A点为起点进行位移，但实际上却是从你最后画的地方开始的！就是说如果你的机器人抬一抬手臂，那么随后画的那个茶壶也会跟着升天！这太可怕了！
+
+显然，我们需要在开始绘制之前备份一下模型视图矩阵，然后在绘制完毕之后再恢复它。这就是mvPushMatrix和mvPopMatrix的用处。mvPushMatrix将矩阵放置到堆栈中，然后mvPopMatrix抛弃当前矩阵，再从堆栈顶部取出之前的矩阵，然后将它储存起来。我们使用了堆栈，所以可以嵌套许多层绘制的代码，每一层都与模型视图矩阵相乘，结束时后者再被恢复。所以当我们结束绘制旋转的三角形时，我们用mvPopMatrix来恢复模型视图矩阵，然后：
+
+219
+        mvMatrix.translate(OAK.SPACE_WORLD, 1.5, 0.0, -7.0, true);
+在当前未旋转的帧中移动穿过场景。（如果你还是对上面讲的不太清楚，我建议你移除代码中的push/pop的部分，然后运行一下看看，你马上就会明白了！）
+
+好了，以上三个代码上的改变让三角形成功的围绕穿过中心的垂直轴旋转起来，并且不会影响到旁边的矩形。下面是相似的代码让矩形围绕穿过中心的水平轴旋转。
+
+220
+221
+222
+223
+224
+225
+226
+227
+228
+229
+230
+231
+232
+        mvMatrix.rotX(OAK.SPACE_LOCAL, rSquare, true);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+ 
+        mvPopMatrix();
+    }
+以上就是drawScene函数中代码改变的部分。
+
+显然，我们另外需要做的一件事就是要让我们的场景动起来，这需要根据时间改变rTri和rSquare的值，使得每次绘制场景的时候，都会有些许的不同。这些事情，我们放到了新增加的animate函数中去实现：
+
+236
+237
+238
+239
+240
+241
+242
+243
+244
+245
+246
+247
+    var lastTime = 0;
+ 
+    function animate() {
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+            var elapsed = timeNow - lastTime;
+ 
+            rTri += (90 * elapsed) / 1000.0;
+            rSquare += (75 * elapsed) / 1000.0;
+        }
+        lastTime = timeNow;
+    }
+想要使场景动起来，一个简单的思路就是每当animate函数被调用时，就根据一个固定的值去旋转三角形和矩形（原始的OpenGL教程也正是这么做的），但是这里我用了另一个我个人感觉稍微更好的方式，每次旋转的角度是由从上一次函数被调用到这一次的时间来决定的。另外，我指定三角形每秒旋转90度，矩形每秒旋转75度。这样做的好处是，无论电脑的性能如何，每个人都会看到相同的运动速率；否则电脑比较慢的用户（也就是说比起速度较快的机器，okRequestAnimationFrame被调用的频率不会那么高）将会看到非常坑爹的运行效果。这对于我们这种简单的Demo来说也许不算什么，但是对于大型的程序，比如游戏，就会相当有用。
+
+以上就是绘制运动场景的代码。下面我们来看看我们额外增加的那些代码，mvPushMatrix和mvPopMatrix。
+
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+    var mvMatrix ;
+    var mvMatrixStack = [];
+    var pMatrix ;
+ 
+    function mvPushMatrix() {
+        var copy = new okMat4();
+        mvMatrix.clone(copy);
+        mvMatrixStack.push(copy);
+    }
+ 
+    function mvPopMatrix() {
+        if (mvMatrixStack.length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        mvMatrix = mvMatrixStack.pop();
+    }
+这一部分很好理解，我们建立了一个列表用来储存矩阵堆栈，然后用压栈出栈来备份和恢复模型视图矩阵。
+
+好了，本节课到此为止。现在你应该明白如何去制作简单的WebGL运动场景了。如果有任何问题、更正和意见，都请留言给我。
+
+下节课，我们将开始绘制一个真正的3D物体，而不是3D世界中的2D形状。那么，下节课再见！

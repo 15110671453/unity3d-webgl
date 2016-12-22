@@ -1,0 +1,233 @@
+Lesson 13 片元级光照与多program对象
+By adminOn 2011 年 9 月 23 日一条评论 1,526 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到WebGL教程的第13课。在本节课中，我们将会讲解逐片元光照（Per-fragment Lighting），比起我们之前一直使用的逐顶点光照（Per-vertex Lighting），前者对于显卡是来说是一项更加困难的工作，但是同时也会生成更加真实的效果；同时我们还会看一下如何通过选择使用WebGL program对象来切换代码中用到的着色器。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+你会看到一个球体和一个立方体在围绕轨道旋转；在纹理载入阶段，它们是白色的，当纹理载入后，你会看到月球和一个木质的板条箱。这个场景和第12课中的非常相似，但是我们让轨道上的两个物体的距离更近了，这样你可以更加清晰的看到它们的样子。和之前一样，两个物体都是被位于它们中间的点光源所照亮。如果你想要改变光源的位置和颜色等，可以使用canvas下面的文本输入框。你还可以使用复选框开启和关闭光源，切换逐片元光照和逐顶点光照，以及选择是否使用纹理。
+
+请试着在逐片元光照和逐顶点光照之间切换。你应该能够很容易的看出它们之间的区别，尤其是在板条箱上。当启用逐片元光照时，板条箱的中间明显比其他部分更明亮；而在月球上，效果不是那么明显，只是在边缘区域，光照的淡出效果更加平滑，锯齿也更少。当关闭纹理之后，你会更容易地观察到这些效果。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+让我们先讲一下，耗费更多的显卡资源去实现逐片元光照为什么是值得的。你也许还记得左边这张在第7课出现过的图片。你已经知道，物体表面的光亮程度是由法线和入射光线之间的夹角决定的。到目前为止，我们的光照效果都是在顶点着色器中计算的，其中用到了每个顶点的法线和光照方向。这中间有一个称之为光照量的参数，也就是物体表面反射了多少光。我们把这个参数以varying变量的形式，从顶点着色器传递到片元着色器，用来调整片元的颜色，反映出相应的光照程度。这个光照量的参数，和其他varying变量一样，对于顶点之间的片元，都会被WebGL进行线性插值。所以，在左边的图中，B点将会相当明亮，因为B点的光线几乎是平行于法线的；而A点则会稍微暗一些，因为光线的入射角更大一些。在A点和B点之间的点，将会有一个从明到暗的渐变。这个效果看起来非常好。
+
+让我们把光源的位置往上提提，就像右图中的那样。A点和C点都会比较暗，因为光线的入射角更大。假设我们仍然使用逐顶点光照，那么B点的明亮程度应该是A点和C点的平均值，所以B点也同样会比较暗。但是，这很明显是错误的！在B点，光线几乎是平行于法线的，所以它应该是其中最明亮的一个点。所以在计算顶点之间的片元光照时，我们必须逐个片元、逐个片元的单独进行计算。
+
+每个片元都要计算各自的光照效果，意味着我们需要它们各自的位置（用于计算光照方向）和各自的法线；我们可以把这些值都从顶点着色器传递到片元着色器。同样它们也会被线性插值，所以位置值会是一条顶点间的直线，而法线值将会平滑地改变。那条直线正是我们想要的；而A点和C点的法线是相同的，所以这两点之间所有片元的法线也是相同的，这也很完美。
+
+这样就解释了为什么在我们的页面上，启用逐片元光照后立方体看起来更加真实。另外还有一个好处，那就是对于用平面图形逼近组成的弯曲表面，例如球体，它也能给出很好的光照效果。因为如果两个顶点的法线不同，那么对于这两个顶点之间的片元来说，线性插值后的法线也会平滑的改变，这样就实现了曲面效果。在我们的这种思考方式中，逐片元光照实际上是冯氏着色法（Phong shading）的一种形式，下面的这幅图很好的解释了这种效果，我就不用再多费口舌了。
+
+
+
+你同样也可以在Demo中观察到这种效果。当你关闭逐片元光照，启用逐顶点光照时，你会发现阴影的边缘（也就是点光源失效，完全被环境光接管的部分）看起来有很多锯齿。这是因为球体是由很多三角形组成的，你可以仔细观察它们的边缘。当你开启逐片元光照时，你会发现边缘的这种过度非常平滑，更像是真正的球体上的效果。
+
+好了，以上就是理论部分，现在让我们看一下代码吧。着色器部分的代码在页面的顶部，我们先来看一下它们。因为在这节课中我们既要用到逐顶点光照又要用到逐片元光照，这是由页面上的复选框决定的，所以每个光照技术都需要有各自的顶点着色器和片元着色器（将两者都写到一起也是可能的，但是这会导致代码很难读）。我们稍后再讲切换不同光照技术的方法，现在你只要记住在页面中我们是通过定义脚本中的id标签来区别二者的。首先是用于逐顶点光照的一对着色器，它们和第7课中的代码完全一样，所以我只列出脚本标签，注意看其中id。
+
+8
+<script id="per-vertex-lighting-fs" type="x-shader/x-fragment">
+31
+<script id="per-vertex-lighting-vs" type="x-shader/x-vertex">
+然后是逐片元光照的片元着色器。
+
+68
+69
+70
+71
+72
+73
+74
+75
+76
+77
+78
+79
+80
+81
+82
+83
+84
+85
+86
+87
+88
+89
+90
+91
+92
+93
+94
+95
+96
+97
+98
+99
+100
+101
+102
+103
+104
+105
+106
+107
+<script id="per-fragment-lighting-fs" type="x-shader/x-fragment">
+ 
+    precision mediump float;
+ 
+ 
+    varying vec2 vTextureCoord;
+    varying vec3 vTransformedNormal;
+    varying vec4 vPosition;
+ 
+    uniform bool uUseLighting;
+    uniform bool uUseTextures;
+ 
+    uniform vec3 uAmbientColor;
+ 
+    uniform vec3 uPointLightingLocation;
+    uniform vec3 uPointLightingColor;
+ 
+    uniform sampler2D uSampler;
+ 
+ 
+    void main(void) {
+        vec3 lightWeighting;
+        if (!uUseLighting) {
+            lightWeighting = vec3(1.0, 1.0, 1.0);
+        } else {
+            vec3 lightDirection = normalize(uPointLightingLocation - vPosition.xyz);
+ 
+            float directionalLightWeighting = max(dot(normalize(vTransformedNormal), lightDirection), 0.0);
+            lightWeighting = uAmbientColor + uPointLightingColor * directionalLightWeighting;
+        }
+ 
+        vec4 fragmentColor;
+        if (uUseTextures) {
+            fragmentColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+        } else {
+            fragmentColor = vec4(1.0, 1.0, 1.0, 1.0);
+        }
+        gl_FragColor = vec4(fragmentColor.rgb * lightWeighting, fragmentColor.a);
+    }
+</script>
+你会发现其中的代码和我们之前一直在顶点着色器中写的代码非常相似。实际上，根本也是做的完全一样的工作，计算出光线方向，然后与法线结合在一起，计算出光照亮。区别在于，参与运算的这些值是从varying变量中引入的，而不是顶点属性；并且最后的光照亮会立即与纹理材质结合，而不是先输出再稍后处理。值得注意的是，我们必须将线性插值之后的法线进行归一化处理。归一化，就是将一个向量的长度调整为1。这是因为在两个长度为1的向量间进行插值，仅仅是确保插值后的向量指向正确的方向，而不会确保长度依然为1。所以我们必须对其进行归一化处理。
+
+因为所有的重担都由片元着色器承担了，所以在逐片元光照中，顶点着色器的代码相对比较简单。
+
+109
+110
+111
+112
+113
+114
+115
+116
+117
+118
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+<script id="per-fragment-lighting-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec3 aVertexNormal;
+    attribute vec2 aTextureCoord;
+ 
+    uniform mat4 uMVMatrix;
+    uniform mat4 uPMatrix;
+    uniform mat4 uNMatrix;
+ 
+    varying vec2 vTextureCoord;
+    varying vec3 vTransformedNormal;
+    varying vec4 vPosition;
+ 
+ 
+    void main(void) {
+        vPosition = uMVMatrix * vec4(aVertexPosition, 1.0);
+        gl_Position = uPMatrix * vPosition;
+        vTextureCoord = aTextureCoord;
+        vTransformedNormal = (uNMatrix * vec4(aVertexNormal, 1.0)).xyz;
+    }
+</script>
+在应用了模型视图矩阵并和法线矩阵相乘之后，我们依然需要计算出顶点的位置。但是我们只需要把它们储存到varying变量中就可以了，稍后在片元着色器中会用到。
+
+以上就是着色器中的全部代码了！剩下的代码和之前的课程中的非常类似，除了一个地方。到目前为止，我们在一个WebGL页面中只使用了1个顶点着色器和1个片元着色器。现在你也许还记得在第1课中我们提到过，WebGL program对象是用来把着色器代码传送到显卡端的，一个program对象只能同时包含1个顶点着色器和1个片元着色器。这也就是说，我们需要定义两个program对象，然后根据是否开启逐片元光照的复选框来切换它们。
+
+方法很简单，initShaders函数做出了如下变化：
+
+222
+223
+224
+225
+226
+227
+228
+229
+    var currentProgram;
+    var perVertexProgram;
+    var perFragmentProgram;
+ 
+    function initShaders() {
+        perVertexProgram = createProgram("per-vertex-lighting-fs", "per-vertex-lighting-vs");
+        perFragmentProgram = createProgram("per-fragment-lighting-fs", "per-fragment-lighting-vs");
+    }
+我们定义了两个独立的全局变量，一个用来储存逐顶点光照，另一个用来储存逐片元光照；另外还有一个currentProgram变量用来表示当前正在使用的光照。createProgram函数和我们之前用的那个是一样的，只不过被参数化了，我就不重复解释了。
+
+然后我们在drawScene函数一开始就切换到相应的program。
+
+534
+535
+536
+537
+538
+539
+540
+541
+542
+543
+544
+545
+546
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+ 
+        var perFragmentLighting = document.getElementById("per-fragment").checked;
+        if (perFragmentLighting) {
+            currentProgram = perFragmentProgram;
+        } else {
+            currentProgram = perVertexProgram;
+        }
+        gl.useProgram(currentProgram);
+我们必须一开始就做这项工作是因为，当我们在编写绘制的代码时（比如设置uniform变量或者将顶点数组绑定到attribute上），我们需要确定当前program是哪一个，否则我们就可能使用了错误的program。
+
+548
+549
+        var lighting = document.getElementById("lighting").checked;
+        gl.uniform1i(currentProgram.useLightingUniform, lighting);
+这样，你应该能看出来，每次我们调用drawScene函数使用了并且仅使用了一个program；在不同的调用中可能会用到不同的program。你也许会问，是否可以在drawScene函数内部的不同地方使用不同的program？那么场景中不同的部分就会用不同的着色器绘制，比如说也许你的场景中有一部分需要用逐片元光照，另一部分需要用逐顶点光照。答案是肯定的！尽管在本课中不需要这么做，但是，它是完美可行的并且实际上非常有用！
+
+好了，本节课结束了。你学会了如何使用多个program来切换着色器，以及如何使用逐像素光照。下节课我们将会讲解第7课剩下的最后一种光照形式——镜面高光！

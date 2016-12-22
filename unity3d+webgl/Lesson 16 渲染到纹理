@@ -1,0 +1,395 @@
+Lesson 16 渲染到纹理
+By adminOn 2011 年 10 月 2 日6 条评论 3,439 次浏览
+HiWebGL译者声明：因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改！本教程由HiWebGL翻译整理，转载请注明出处！
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。Oak3D主页：http://www.oak3d.com 
+
+欢迎来到系列教程的第16课！在这一课中，我们将介绍一种非常有用的绘制技术: 将3D场景渲染到一张纹理中。通过这一技术，我们可以在绘制过程中利用上一次绘制的结果来创造一些特殊的效果。同时，这也是一种常用的绘制技巧，除了在一个场景中绘制另一个场景（本课将详细解释这种应用途径）外，渲染到纹理也是做选取（鼠标在3D场景中点选物体）、引用、反射等3D特效的基础技术。
+
+下面的视频就是我们这节课将会完成的最终效果。
+
+
+
+点击这里打开一个独立的WebGL页面，如果你的浏览器不支持WebGL，请点击这里。
+
+在本课的演示程序中，你会看到一个综合了多种光照效果(包含笔记本屏幕上的高光)的白色笔记本模型。除了笔记本模型，你会发现一些更加有趣的东西，在笔记本的屏幕上显示了另外一个3D场景，对，没错，那是13课中我们看过的月球和木箱。这个演示程序的思路很清楚，它将13课中的3D场景渲染到了一张2D纹理上，然后将这张2D纹理映射到了笔记本模型的屏幕上。
+
+下面我们来看看它是怎么工作的……
+
+惯例声明：本系列的教程是针对那些已经具备相应编程知识但没有实际3D图形经验的人的；目标是让学习者创建并运行代码，并且明白代码其中的含义，从而可以快速地创建自己的3D Web页面。如果你还没有阅读前一课，请先阅读前一课的内容吧。因为本课中我只会讲解那些与前一课中不同的新知识。
+
+另外，我编写这套教程是因为我在独立学习WebGL，所以教程中可能（非常可能）会有错误，所以还请风险自担。尽管如此，我还是会不断的修正bug和改正其中的错误的，所以如果你发现了教程中的错误，请告诉我。
+
+有两种方法可以获得上面实例的代码：在实例的独立页面中选择“查看源代码”；或者点击这里下载我们为您准备好的压缩包。
+
+你可以使用任何你所熟悉的文本编辑器来查看课程源码（index.html）。本课内容的文件组织与前几课有较大的不同，下面让我们按由下向上的顺序来查看代码内容。首先是webGLStart，发生变化的代码位于第789行。
+
+786
+787
+788
+789
+790
+791
+792
+793
+794
+795
+796
+797
+798
+799
+    function webGLStart() {
+        var canvas = document.getElementById("lesson16-canvas");
+        initGL(canvas);
+        initTextureFramebuffer();
+        initShaders();
+        initBuffers();
+        initTextures();
+        loadLaptop();
+ 
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+ 
+        tick();
+    }
+这段代码看起来并没有什么特别的地方，初始化WebGL，加载Shader，创建用于绘制的顶点Buffer，加载用于月亮和木箱的纹理，及像14课中加载茶壶模型一样，加载JSON格式的笔记本模型文件。在这中间，唯一所不同的，就是我们额外为纹理创建了一个framebuffer。在继续解释代码内容之前，让我们首先来了解一下什么是frame buffer。
+
+当你使用WebGL API渲染3D内容时，显卡需要一块缓冲区来存储渲染的最终结果。通过WebGL 接口，你实际上可以控制这块存储区域的结构类型。首先，你至少需要一块区域来存储每个像素渲染后的颜色结果，同时，你往往还需要一个depth buffer(深度缓冲区)来处理视线遮挡，这样，近处的像素将会遮挡住较远处的像素，depth buffer同样需要一部分存储空间。除此之外，有时我们也会用到一些其它种类的buffer，比如stencil buffer(模板缓冲区)，在接下来的系列教程中，我们会讲到它。
+
+Framebuffer就是用来存储渲染结果的这一类缓冲区的一种集合。如果你没有指定，默认会存在一个”Default” frame buffer，也就是到本课之前，我们一直在使用的frame buffer，它代表最终会被显示在网页中的缓冲区域。除此之外，你可以创建你自己的frame buffer，并指定WebGL将渲染结果输送到你所创建的frame buffer中。在本课中，我们创建了一个自己的frame buffer，并指定它使用一张纹理作为存储像素颜色的缓冲区。同时，我们也需要分配一个深度缓冲区来做深度遮挡计算。
+
+下面，让我们来看一下创建frame buffer的具体代码。在本课的实例中，initTextureFramebuffer函数完成了这个工作，如果你需要查找这个函数，它大概在文件中从上向下浏览的三分之一处。
+
+258
+259
+260
+261
+    var rttFramebuffer;
+    var rttTexture;
+ 
+    function initTextureFramebuffer() {
+在函数之前，我们定义了两个全局变量，rttFramebuffer用来存储将被渲染到笔记本屏幕的frame buffer，而rttTexture用来存储容纳笔记本屏幕渲染结果的纹理(rttTexture在我们绘制整个笔记本场景时会使用到)。下面，继续看这个函数接下来的部分。
+
+262
+263
+264
+265
+        rttFramebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+        rttFramebuffer.width = 512;
+        rttFramebuffer.height = 512;
+第一步是创建一个frame buffer，然后的操作流程很标准，就像纹理和vertex attribute buffer一样，我们将frame buffer指定为WebGL的当前frame buffer。当前frame buffer的含义就是其后的对frame buffer的操作都将作用在当前frame buffer上。此外，我们将笔记本屏幕的绘制尺寸储存在了我们所创建的frame buffer中，注意，这两个尺寸属性并不是frame buffer的固有属性，我只是利用了javascript动态为对象添加属性的技巧，因为在后续对frame buffe的使用中，我们需要这个信息。我们选择绘制一个512×512 的frame buffer，WebGL的只能创建2的整数幂次大小的纹理，而对于我们的应用环境，256×256则会使得画面出现模糊，而更高的1024×1024则不会对提高画面精细度有太大的帮助。
+
+接下来，我们创建一个纹理对象，并初始化相应的参数。
+
+267
+268
+269
+270
+271
+        rttTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+        gl.generateMipmap(gl.TEXTURE_2D);
+之后，我们调用gl.texImage2D来为纹理初始化数据，但在这里我们会发现一些与之前不同的地方。
+
+273
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, rttFramebuffer.width, rttFramebuffer.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+通常，当我们想为texture加载一张图片时，我们会使用gl.texImage2D来为texture指定对应的Image，但在这里，我们并没有图片可用来加载，所以我们调用了gl.texImage2D 的另外一个版本，告诉WebGL我们并没有Image可供加载，我们仅仅需要创建一个指定大小的空数据的纹理对象。严格来说，这里的最后一个参数是用来指定传入纹理的像素列表，但在这里，我们不需要纹理对象加载任何数据，所以在这里，我们传入null。（早期的Minefield 需要使用者传入一个指定大小的空数组来初始化纹理，但这个问题目前似乎已经被修复掉了）
+
+现在我们拥有了一张用来存储颜色结果的纹理，接下来，我们需要创建一张depth buffer用来记录深度信息。
+
+275
+276
+277
+        var renderbuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, rttFramebuffer.width, rttFramebuffer.height);
+这里我们创建了一个render buffer对象，render buffer表示用来存储与frame buffer相关的广义用途的缓冲区,你可以用它来作为深度缓冲，或者模板缓冲，或者两者兼之。像其它缓冲区对象一样，我们绑定render buffer，将它作为WebGL的当前render buffer，并调用gl.renderbufferStorage来通知WebGL当前render buffer用作深度缓冲区，每个像素的深度数据大小16位，同时我们还指定了render buffer的尺寸。
+
+接下来：
+
+279
+280
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rttTexture, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, renderbuffer);
+我们将创建的纹理和render buffer都绑定到当前的frame buffer上(不要忘记，在frame buffer被创建后，我们就一直将它作为WebGL的当前frame buffer)。这里，我们告诉WebGL当前frame buffer使用rttTexture作为颜色缓冲区（gl.COLOR_ATTACHMENT0），使用我们创建的render buffer作为深度缓冲区（gl.DEPTH_ATTACHMENT）。
+
+到此为止，frame buffer的内容初始化工作就完成了，WebGL已经知道我们所创建的frame buffer该绘制到什么地方去；所以，在这之后，我们将当前的texture、renderbuffer和framebuffer重置为默认状态。
+
+282
+283
+284
+        gl.bindTexture(gl.TEXTURE_2D, null);
+        gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+现在我们有了一个自定义的frame buffer，那如何去使用它呢? 让我们跳到drawScene函数来看一下，这个函数在文件的底部。在函数的最开始处，在正常的视口设置等初始化工作之前，你应该看到了一些新东西。
+
+685
+686
+687
+688
+689
+690
+691
+692
+693
+694
+695
+696
+    var laptopAngle = 0;
+ 
+    function drawScene() {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, rttFramebuffer);
+        drawSceneOnLaptopScreen();
+ 
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+ 
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+ 
+        pMatrix = okMat4Proj(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+函数的第一行，非常容易理解，我们将当前frame buffer从默认frame buffer切换到之前在initTextureFramebuffer函数中所创建的frame buffer，这样，后续的绘制工作将被导向我们所设置的纹理和深度缓冲，而不再是最终的网页。之后，我们调用drawSceneOnLaptopScreen函数，将需要显示在笔记本屏幕上的3D场景绘制到指定的当前frame buffer中，绘制结束后，当前frame buffer被切换后默认状态。在继续接下来的学习之前，我认为读者有必要了解一下drawSceneOnLaptopScreen这个函数的内容，我不会在这里列出它们，因为所涉及的代码非常简单,基本是第13课中drawscene函数的简化版。这是因为我们之前的绘制代码并没有设置特定的frame buffer，而仅仅是将所有内容绘制到当前frame buffer上，这里与13课中唯一的不同就是我们去掉了可移动光源等在本课中并不需要的场景元素。
+
+所以，当drawScene函数开头的三行代码执行后，我们就拥有了一张存储着第13课场景绘制结果的纹理。绘制代码的剩余部分就是正常绘制出笔记本模型，并将之前存储着场景绘制结果的纹理映射到笔记本模型的屏幕上。首先是初始化model-view矩阵，并将笔记本旋转一定的角度，角度由laptopAngle给出（像之前的课程一样，laptopAngle每帧都会在animate函数中更新来实现笔记本模型的持续旋转效果）。
+
+698
+699
+700
+701
+702
+703
+704
+        mvMatrix.identity();
+ 
+        mvPushMatrix();
+ 
+        mvMatrix.translate(OAK.SPACE_LOCAL, 0, -0.4, -2.2, true);
+        mvMatrix.rotY(OAK.SPACE_LOCAL, laptopAngle, true);
+        mvMatrix.rotX(OAK.SPACE_LOCAL, -90, true);
+之后，在下面的代码中，我们将场景中光源的颜色和位置等信息传给显卡。
+
+706
+707
+708
+709
+710
+711
+        gl.uniform1i(shaderProgram.showSpecularHighlightsUniform, true);
+        gl.uniform3f(shaderProgram.pointLightingLocationUniform, -1, 2, -1);
+ 
+        gl.uniform3f(shaderProgram.ambientLightingColorUniform, 0.2, 0.2, 0.2);
+        gl.uniform3f(shaderProgram.pointLightingDiffuseColorUniform, 0.8, 0.8, 0.8);
+        gl.uniform3f(shaderProgram.pointLightingSpecularColorUniform, 0.8, 0.8, 0.8);
+接下来，我们需要将笔记本的光照材质信息传入显卡，这里有一些之前没有出现过的新内容，但它们与渲染到纹理技术本身并没有关系。你也许还记得，在第7课中，当我们描述Phong光照算法的时候，我提到了材质信息对应不同的光照类型有不同的颜色信息：ambient color（环境反射光），diffuse colour（漫反射光），specular colour（镜面反射光/高光）。在之前的课程中，我们始终假设所有的材质颜色都是纯白色，如果有纹理，我们则取纹理颜色作为所有材质属性的颜色，但在本课中，这种简化后的光照方式将不再试用，原因你将在稍后的文章中看到。在这里，我们需要为材质的每一种属性信息设置单独的数据，同时，我们还引入了一种新的材质属性：emissive colour(自发光)。但是不用担心，对于笔记本模型来说，这个设置过程非常简单，因为笔记本本身是白色的。
+
+713
+714
+715
+716
+717
+718
+719
+        // The laptop body is quite shiny and has no texture.  It reflects lots of specular light
+        gl.uniform3f(shaderProgram.materialAmbientColorUniform, 1.0, 1.0, 1.0);
+        gl.uniform3f(shaderProgram.materialDiffuseColorUniform, 1.0, 1.0, 1.0);
+        gl.uniform3f(shaderProgram.materialSpecularColorUniform, 1.5, 1.5, 1.5);
+        gl.uniform1f(shaderProgram.materialShininessUniform, 5);
+        gl.uniform3f(shaderProgram.materialEmissiveColorUniform, 0.0, 0.0, 0.0);
+        gl.uniform1i(shaderProgram.useTexturesUniform, false);
+下一步，如果笔记本模型的顶点数据已经加载完毕，那就将它绘制出来，这部分代码读者应该已经非常熟悉了，特别是在阅读过14课之后（实际上，大部分是从第14课的内容中复制过来的）。
+
+721
+722
+723
+724
+725
+726
+727
+728
+729
+730
+731
+732
+733
+734
+        if (laptopVertexPositionBuffer) {
+            gl.bindBuffer(gl.ARRAY_BUFFER, laptopVertexPositionBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, laptopVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+            gl.bindBuffer(gl.ARRAY_BUFFER, laptopVertexTextureCoordBuffer);
+            gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, laptopVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+            gl.bindBuffer(gl.ARRAY_BUFFER, laptopVertexNormalBuffer);
+            gl.vertexAttribPointer(shaderProgram.vertexNormalAttribute, laptopVertexNormalBuffer.itemSize, gl.FLOAT, false, 0, 0);
+ 
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, laptopVertexIndexBuffer);
+            setMatrixUniforms();
+            gl.drawElements(gl.TRIANGLES, laptopVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+        }
+上面的代码已经将笔记本模型绘制在了网页上，下面，我们需要将纹理映射到笔记本的屏幕上。首先依然是需要设置光照参数，在这里，我们设置了不同的emissive colour。
+
+736
+737
+738
+739
+740
+741
+        gl.uniform3f(shaderProgram.materialAmbientColorUniform, 0.0, 0.0, 0.0);
+        gl.uniform3f(shaderProgram.materialDiffuseColorUniform, 0.0, 0.0, 0.0);
+        gl.uniform3f(shaderProgram.materialSpecularColorUniform, 0.5, 0.5, 0.5);
+        gl.uniform1f(shaderProgram.materialShininessUniform, 20);
+        gl.uniform3f(shaderProgram.materialEmissiveColorUniform, 1.5, 1.5, 1.5);
+        gl.uniform1i(shaderProgram.useTexturesUniform, true);
+下面，我们需要设置用于采样的纹理，也就是之前存储着第一次绘制结果的纹理对象。
+
+752
+753
+754
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, rttTexture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+最后，绘制笔记本屏幕。
+
+756
+757
+758
+759
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, laptopScreenVertexPositionBuffer.numItems);
+ 
+        mvPopMatrix();
+整个过程是不是有些由繁入简的感觉呢? :) 上面就是实现渲染到纹理，并将纹理用作其它绘制的全部代码。
+
+在本文的最后，我们给出了一个用于新材质类型光照的fragment shader，在理解之前课程的基础上，新shader的内容应该非常容易理解。这里唯一的新内容就是增加了emissive colour，而shader对它的处理仅仅的将它简单的加在最终的像素颜色上：
+
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+66
+67
+68
+69
+70
+71
+72
+ 
+    precision mediump float;
+ 
+ 
+    varying vec2 vTextureCoord;
+    varying vec3 vTransformedNormal;
+    varying vec4 vPosition;
+ 
+    uniform vec3 uMaterialAmbientColor;
+    uniform vec3 uMaterialDiffuseColor;
+    uniform vec3 uMaterialSpecularColor;
+    uniform float uMaterialShininess;
+    uniform vec3 uMaterialEmissiveColor;
+ 
+    uniform bool uShowSpecularHighlights;
+    uniform bool uUseTextures;
+ 
+    uniform vec3 uAmbientLightingColor;
+ 
+    uniform vec3 uPointLightingLocation;
+    uniform vec3 uPointLightingDiffuseColor;
+    uniform vec3 uPointLightingSpecularColor;
+ 
+    uniform sampler2D uSampler;
+ 
+ 
+    void main(void) {
+        vec3 ambientLightWeighting = uAmbientLightingColor;
+ 
+        vec3 lightDirection = normalize(uPointLightingLocation - vPosition.xyz);
+        vec3 normal = normalize(vTransformedNormal);
+ 
+        vec3 specularLightWeighting = vec3(0.0, 0.0, 0.0);
+        if (uShowSpecularHighlights) {
+            vec3 eyeDirection = normalize(-vPosition.xyz);
+            vec3 reflectionDirection = reflect(-lightDirection, normal);
+ 
+            float specularLightBrightness = pow(max(dot(reflectionDirection, eyeDirection), 0.0), uMaterialShininess);
+            specularLightWeighting = uPointLightingSpecularColor * specularLightBrightness;
+        }
+ 
+        float diffuseLightBrightness = max(dot(normal, lightDirection), 0.0);
+        vec3 diffuseLightWeighting = uPointLightingDiffuseColor * diffuseLightBrightness;
+ 
+        vec3 materialAmbientColor = uMaterialAmbientColor;
+        vec3 materialDiffuseColor = uMaterialDiffuseColor;
+        vec3 materialSpecularColor = uMaterialSpecularColor;
+        vec3 materialEmissiveColor = uMaterialEmissiveColor;
+        float alpha = 1.0;
+        if (uUseTextures) {
+            vec4 textureColor = texture2D(uSampler, vec2(vTextureCoord.s, vTextureCoord.t));
+            materialAmbientColor = materialAmbientColor * textureColor.rgb;
+            materialDiffuseColor = materialDiffuseColor * textureColor.rgb;
+            materialEmissiveColor = materialEmissiveColor * textureColor.rgb;
+            alpha = textureColor.a;
+        }
+        gl_FragColor = vec4(
+            materialAmbientColor * ambientLightWeighting
+            + materialDiffuseColor * diffuseLightWeighting
+            + materialSpecularColor * specularLightWeighting
+            + materialEmissiveColor,
+            alpha
+        );
+    }
+到此为止，本课的所有内容就结束了。在这一课中，我们学习到了如何将一个场景渲染到一张纹理中，并在另一个场景中使用这张纹理，同时，我们也深入了解了材质属性的细节和它们的工作原理。在下一课中，我们将给出一个渲染到纹理的实际应用：3D场景中的鼠标点选，这个功能可以让用户通过鼠标点击与3D场景中物体进行直接交互。

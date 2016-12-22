@@ -1,0 +1,39 @@
+WebGL中文教程翻译工程启动！
+By adminOn 2011 年 8 月 16 日100 条评论 51,833 次浏览
+WebGL中文教程
+
+Lesson 0 从零开始
+Lesson 1 三角与方块的故事
+Lesson 2 添加颜色
+Lesson 3 动起来！
+Lesson 4 真正的3D物体
+Lesson 5 引入纹理
+Lesson 6 键盘输入和纹理过滤
+Lesson 7 平行光和环境光
+Lesson 8 深度缓存、透明度和混合
+Lesson 9 优化代码结构实现多物体运动
+Lesson 10 载入世界，以及相机简介
+Lesson 11 球体、旋转矩阵和鼠标事件
+Lesson 12 点光源
+Lesson 13 片元级光照与多program对象
+Lesson 14 镜面高光和载入JSON模型
+Lesson 15 高光贴图
+Lesson 16 渲染到纹理
+ 
+
+第1课至第16课所有教程实例打包下载：
+
+115网盘下载：http://115.com/file/dn34mx83#
+
+新浪微博微盘下载：http://vdisk.weibo.com/s/1tsZE/1323662911
+
+ 
+
+作为目前最好的学习WebGL的网站之一，LearingWebGL.com的作者Giles Thomas提供了一系列通俗易懂、由浅入深的教程，并配有配套的代码实例。长期以来国内还没有相应的WebGL中文教程。因此HiWebGL决定正式启动教程翻译工程！
+
+今后HiWebGL将会陆陆续续的更新中文版的WebGL教程。翻译的内容主要是基于LearningWebGL.com的教程。但由于原文最后更新于2011年3月，其中部分章节已经不适合现在的情况（例如Mac OS X的最新版本已经由Snow Leopard升为Lion、Firefox 6.0已经开始将大部分的Linux下的显卡驱动移除出黑名单等），并且一些内容不适合中国本地情况，我们将会酌情进行适量的修改，以适应目前中国开发者的开发环境。
+
+另外，因为译者个人方便的原因，我们将原教程中的第三方图形库由glMatrix改为Oak3D实现，这不影响到Demo的最终效果和实现，也不影响到WebGL的讲解和学习。原教程正文中相应的代码和讲解也为做了相应修改。
+
+关于Oak3D：Oak3D是一套简单易用、性能优越的WebGL Javascript Library。您可以在他们的主页找到更多信息。
+
